@@ -27,6 +27,7 @@ tqdm
 #dropbox
 #git+https://github.com/stefanrmmr/streamlit-audiorec.git#egg=st_audiorec
 #streamlit-audiorec-mirror
+streamlit-audiorec
 # --- Visualization / Plotting (optional) ---
 matplotlib
 
