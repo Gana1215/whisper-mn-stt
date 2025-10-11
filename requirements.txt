@@ -24,9 +24,9 @@ gdown
 pandas
 numpy
 tqdm
-dropbox
+#dropbox
 #git+https://github.com/stefanrmmr/streamlit-audiorec.git#egg=st_audiorec
-streamlit-audiorec-mirror
+#streamlit-audiorec-mirror
 # --- Visualization / Plotting (optional) ---
 matplotlib
 
