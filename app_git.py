@@ -18,28 +18,55 @@ st.title("🎙️ Mongolian Speech-to-Text (Whisper Anti-Hallucination Edition)"
 DROPBOX_MODEL_URL = "https://www.dropbox.com/scl/fo/sruai8kxjto7b9qaq334f/AOQ7s1VL6nGLVjgGS3VSLOM?rlkey=52dakrqa4zfbqknhibv0tcrlt&dl=1"
 
 MODEL_DIR = "./models/checkpoint-3500"
+# ===============================================
+# 📦 Model Downloader + Safe Loader (Dropbox → Local)
+# ===============================================
+import os, zipfile, requests, streamlit as st
+from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
-# --- Auto-download & extract model ---
+MODEL_DIR = "./models/checkpoint-3500"
+MODEL_ZIP = "./checkpoint-3500.zip"
+
+# 🔗 Dropbox direct link (note: use ?dl=1 at the end!)
+DROPBOX_URL = "https://www.dropbox.com/scl/fo/sruai8kxjto7b9qaq334f/AOQ7s1VL6nGLVjgGS3VSLOM?rlkey=52dakrqa4zfbqknhibv0tcrlt&dl=1"
+
 def download_and_extract_model():
-    if os.path.exists(MODEL_DIR):
-        st.info("📁 Model already available locally.")
-        return
-    os.makedirs("./models", exist_ok=True)
-    st.info("⏬ Downloading model from Dropbox...")
-    zip_path = "./models/model.zip"
-    with requests.get(DROPBOX_MODEL_URL, stream=True) as r:
-        r.raise_for_status()
-        with open(zip_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-    st.info("📦 Extracting model...")
-    with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        zip_ref.extractall("./models")
-    os.remove(zip_path)
-    st.success("✅ Model ready!")
+    """Download fine-tuned Whisper model from Dropbox if not present locally."""
+    tokenizer_file = os.path.join(MODEL_DIR, "tokenizer.json")
 
+    if os.path.exists(tokenizer_file):
+        st.info("✅ Model already exists locally — skipping download.")
+        return
+
+    st.info("📥 Downloading model from Dropbox (first-time only)...")
+    os.makedirs("models", exist_ok=True)
+
+    # Download with progress
+    r = requests.get(DROPBOX_URL, stream=True)
+    total = int(r.headers.get("content-length", 0))
+    with open(MODEL_ZIP, "wb") as f:
+        for chunk in r.iter_content(8192):
+            f.write(chunk)
+
+    # Extract zip
+    with zipfile.ZipFile(MODEL_ZIP, "r") as zip_ref:
+        zip_ref.extractall("models")
+    os.remove(MODEL_ZIP)
+    st.success("✅ Model downloaded and extracted!")
+
+# --- Run setup ---
 download_and_extract_model()
+
+# --- Load Whisper model safely ---
+try:
+    processor = WhisperProcessor.from_pretrained(MODEL_DIR)
+    model = WhisperForConditionalGeneration.from_pretrained(MODEL_DIR)
+    st.success("✅ Fine-tuned Whisper model loaded!")
+except Exception as e:
+    st.error(f"⚠️ Could not load fine-tuned model: {e}")
+    st.warning("Loading fallback model: openai/whisper-tiny")
+    processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+    model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
 
 # --- Load Whisper model ---
 processor = WhisperProcessor.from_pretrained(MODEL_DIR)
