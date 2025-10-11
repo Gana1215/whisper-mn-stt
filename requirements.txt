@@ -25,6 +25,7 @@ pandas
 numpy
 tqdm
 dropbox
+git+https://github.com/stefanrmmr/streamlit-audiorec
 # --- Visualization / Plotting (optional) ---
 matplotlib
 
