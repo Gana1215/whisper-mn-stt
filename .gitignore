@@ -1,0 +1,28 @@
+
+# =====================================
+# 🧹 Git Ignore — Whisper STT Project
+# =====================================
+
+# --- Model files ---
+models/
+*.bin
+*.pt
+*.ckpt
+*.h5
+*.safetensors
+
+# --- Python environment ---
+venv/
+env/
+__pycache__/
+*.pyc
+
+# --- OS / Editor files ---
+.DS_Store
+.idea/
+.vscode/
+
+# --- Secrets ---
+secrets.toml
+\
+checkpoint-3500-20251011T000138Z-1-001.zip

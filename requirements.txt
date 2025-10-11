@@ -1,0 +1,32 @@
+# ===============================================
+# Whisper Mongolian STT (Fine-tuning + Streamlit)
+# ===============================================
+
+# --- Core Deep Learning & Audio ---
+torch
+torchaudio
+soundfile
+#torchcodec
+
+# --- Transformers & NLP ---
+transformers>=4.41.0
+datasets
+evaluate
+jiwer
+
+# --- Streamlit App & UI Components ---
+streamlit
+audio-recorder-streamlit
+streamlit-aggrid
+gdown
+
+# --- Data Handling & Utilities ---
+pandas
+numpy
+tqdm
+
+# --- Visualization / Plotting (optional) ---
+matplotlib
+
+# --- Optional: For Colab sharing (if needed later) ---
+# pyngrok
