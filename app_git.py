@@ -10,14 +10,16 @@ import soundfile as sf
 import streamlit as st
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
-# Optional: Recorder (only works if available)
+# --- Optional recorder ---
 try:
     from st_audiorec import st_audiorec
     HAS_RECORDER = True
 except ImportError:
     HAS_RECORDER = False
 
-# ------------------- Streamlit Setup -------------------
+# ===============================================
+# 🌐 Streamlit Setup
+# ===============================================
 st.set_page_config(page_title="Mongolian Whisper STT", layout="centered")
 
 st.markdown("""
@@ -26,7 +28,7 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: 'Noto Sans MN', sans-serif;
 }
-h1, h2 {
+h1, h2, h3 {
     color: #1a73e8;
     text-align: center;
 }
@@ -40,7 +42,7 @@ div[data-testid="stMarkdownContainer"] h2 {
 """, unsafe_allow_html=True)
 
 st.title("🎧 Mongolian Whisper Speech-to-Text")
-st.write("Select how you'd like to use the model below:")
+st.caption("Fine-tuned Whisper model for Mongolian audio recognition")
 
 # ===============================================
 # 📦 Model Download + Extraction
@@ -66,6 +68,8 @@ def download_and_extract_model():
         with zipfile.ZipFile(MODEL_ZIP, "r") as zip_ref:
             zip_ref.extractall(BASE_MODEL_DIR)
         st.success("✅ Extraction complete!")
+    else:
+        st.success("✅ Model ready")
 
 download_and_extract_model()
 
@@ -110,10 +114,24 @@ def trim_silence(audio_tensor, sr=16000, thresh=0.005):
     return audio_tensor[start:end].contiguous()
 
 # ===============================================
-# 🎛 Mode Selector
+# 🎛 Mode Selector (independent states per mode)
 # ===============================================
 st.markdown("---")
-mode = st.selectbox("Choose Mode", ["🎙️ Record Voice", "📂 Upload Audio File"])
+mode = st.selectbox("Select Mode", ["🎙️ Record Voice", "📂 Upload Audio File"], key="mode_selector")
+
+# Independent session states
+if "recognized_text_record" not in st.session_state:
+    st.session_state["recognized_text_record"] = ""
+if "recognized_text_upload" not in st.session_state:
+    st.session_state["recognized_text_upload"] = ""
+
+# Clear data on mode switch
+st.session_state.setdefault("last_mode", None)
+if st.session_state["last_mode"] != mode:
+    st.session_state["last_mode"] = mode
+    st.session_state["recognized_text_record"] = ""
+    st.session_state["recognized_text_upload"] = ""
+    st.experimental_rerun()
 
 # ===============================================
 # 🎤 RECORD MODE
@@ -138,24 +156,35 @@ if mode == "🎙️ Record Voice":
             sr = 16000
             sf.write(temp_path, data.numpy(), sr)
 
-            st.info("⏳ Recognizing your recorded voice... please wait")
+            status = st.info("🎙️ Converting your recorded voice to text...")
             try:
                 inputs = processor(data.numpy(), sampling_rate=sr, return_tensors="pt")
                 with torch.no_grad():
                     predicted_ids = model.generate(**inputs, **generate_kwargs)
-                text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+                recognized_text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+                st.session_state["recognized_text_record"] = recognized_text
+                status.empty()
                 st.success("✅ Recognition complete!")
-                st.markdown("### 🗣️ Recognized Text:")
-                st.markdown(f"<h2>{text}</h2>", unsafe_allow_html=True)
             except Exception as e:
+                status.empty()
                 st.error(f"❌ Error during recognition: {e}")
+
+        if st.session_state["recognized_text_record"]:
+            st.markdown("### 🗣️ Recognized Text:")
+            final_text = st.text_area(
+                "📝 Edit or copy recognized text:",
+                st.session_state["recognized_text_record"],
+                height=150,
+                key="record_text_area"
+            )
+            st.download_button("💾 Save text result", final_text, "recognized_text_record.txt", mime="text/plain")
 
 # ===============================================
 # 📂 UPLOAD MODE
 # ===============================================
 elif mode == "📂 Upload Audio File":
     st.subheader("📂 Upload a .wav file for transcription:")
-    uploaded_file = st.file_uploader("Upload your file", type=["wav"])
+    uploaded_file = st.file_uploader("Upload your audio file", type=["wav"])
 
     if uploaded_file is not None:
         st.audio(uploaded_file, format="audio/wav")
@@ -175,14 +204,25 @@ elif mode == "📂 Upload Audio File":
             st.error(f"❌ Failed to read audio: {e}")
             st.stop()
 
-        st.info("⏳ Recognizing uploaded file... please wait")
+        status = st.info("🎙️ Converting uploaded file to text...")
         try:
             inputs = processor(data.numpy(), sampling_rate=sr, return_tensors="pt")
             with torch.no_grad():
                 predicted_ids = model.generate(**inputs, **generate_kwargs)
-            text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+            recognized_text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+            st.session_state["recognized_text_upload"] = recognized_text
+            status.empty()
             st.success("✅ Recognition complete!")
-            st.markdown("### 🗣️ Recognized Text:")
-            st.markdown(f"<h2>{text}</h2>", unsafe_allow_html=True)
         except Exception as e:
+            status.empty()
             st.error(f"❌ Error during transcription: {e}")
+
+    if st.session_state["recognized_text_upload"]:
+        st.markdown("### 🗣️ Recognized Text:")
+        final_text = st.text_area(
+            "📝 Edit or copy recognized text:",
+            st.session_state["recognized_text_upload"],
+            height=150,
+            key="upload_text_area"
+        )
+        st.download_button("💾 Save text result", final_text, "recognized_text_upload.txt", mime="text/plain")
