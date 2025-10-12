@@ -4,14 +4,14 @@
 import os
 import time
 import torch
-import torchaudio
 import tempfile
 import zipfile
 import requests
+import soundfile as sf
 import streamlit as st
 from transformers import pipeline, WhisperProcessor, WhisperForConditionalGeneration
 
-# --- Streamlit Page Config ---
+# ------------------- Streamlit Page Setup -------------------
 st.set_page_config(page_title="Mongolian Whisper STT", layout="centered")
 
 st.markdown("""
@@ -46,7 +46,7 @@ MODEL_ZIP = os.path.join(MODEL_DIR, "checkpoint-3500.zip")
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 def download_and_extract_model():
-    """Download and extract the model zip from Dropbox if needed."""
+    """Download and extract model zip from Dropbox if needed."""
     if not os.path.exists(MODEL_ZIP):
         st.write("⬇️ Downloading fine-tuned model from Dropbox...")
         r = requests.get(MODEL_ZIP_URL, stream=True)
@@ -90,7 +90,7 @@ except Exception as e:
     processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
     model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
 
-# Anti-hallucination decoding config
+# Anti-hallucination decoding
 forced_ids = processor.get_decoder_prompt_ids(language="mn", task="transcribe")
 generate_kwargs = {
     "forced_decoder_ids": forced_ids,
@@ -116,6 +116,21 @@ asr = pipeline(
 )
 
 # ===============================================
+# 🧹 Silence Trimmer
+# ===============================================
+def trim_silence(audio_tensor, sr=16000, thresh=0.005):
+    frame_len = int(sr * 0.03)
+    frames = audio_tensor.unfold(0, frame_len, frame_len)
+    energy = (frames ** 2).mean(dim=1)
+    mask = energy > thresh
+    if not mask.any():
+        return audio_tensor
+    mask_int = mask.int()
+    start = (mask_int.argmax().item()) * frame_len
+    end = (len(mask_int) - torch.flip(mask_int, [0]).argmax().item()) * frame_len
+    return audio_tensor[start:end].contiguous()
+
+# ===============================================
 # 🎤 Upload + Transcribe Audio
 # ===============================================
 st.markdown("---")
@@ -123,32 +138,23 @@ st.subheader("🎙️ Upload a .wav file")
 
 uploaded_file = st.file_uploader("Upload a .wav file", type=["wav"])
 
-def trim_silence(audio, sr=16000, thresh=0.005):
-    """Remove silent segments from start/end."""
-    frame_len = int(sr * 0.03)
-    frames = audio.unfold(0, frame_len, frame_len)
-    energy = (frames ** 2).mean(dim=1)
-    mask = energy > thresh
-    if not mask.any():
-        return audio
-    mask_int = mask.int()
-    start = (mask_int.argmax().item()) * frame_len
-    end = (len(mask_int) - torch.flip(mask_int, [0]).argmax().item()) * frame_len
-    return audio[start:end].contiguous()
-
 if uploaded_file is not None:
     st.audio(uploaded_file, format="audio/wav")
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         tmp.write(uploaded_file.read())
         temp_path = tmp.name
 
-    # Process audio
-    wav, sr = torchaudio.load(temp_path)
-    if wav.shape[0] > 1:
-        wav = torch.mean(wav, dim=0, keepdim=True)
-    wav = torchaudio.functional.resample(wav, sr, 16000)
-    wav = trim_silence(wav.squeeze(0))
-    torchaudio.save(temp_path, wav.unsqueeze(0), 16000)
+    # --- Load audio using soundfile (instead of torchaudio) ---
+    try:
+        data, sr = sf.read(temp_path)
+        if len(data.shape) > 1:
+            data = data.mean(axis=1)  # convert to mono
+        data = torch.tensor(data, dtype=torch.float32)
+        data = trim_silence(data)
+        sf.write(temp_path, data.numpy(), 16000)
+    except Exception as e:
+        st.error(f"❌ Failed to read audio file: {e}")
+        st.stop()
 
     st.info("⏳ Recognizing your voice... please wait")
     try:
