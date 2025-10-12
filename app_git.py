@@ -131,7 +131,7 @@ if st.session_state["last_mode"] != mode:
     st.session_state["last_mode"] = mode
     st.session_state["recognized_text_record"] = ""
     st.session_state["recognized_text_upload"] = ""
-    st.experimental_rerun()
+    st.rerun()
 
 # ===============================================
 # 🎤 RECORD MODE
