@@ -56,6 +56,17 @@ def download_and_extract_model():
 
 # --- Run setup ---
 download_and_extract_model()
+# --- Debug: Inspect extracted model directory ---
+st.markdown("### 🧾 Model directory contents:")
+if os.path.exists(MODEL_DIR):
+    files = []
+    for root, dirs, filenames in os.walk(MODEL_DIR):
+        for name in filenames:
+            rel_path = os.path.relpath(os.path.join(root, name), MODEL_DIR)
+            files.append(rel_path)
+    st.code("\n".join(files) if files else "⚠️ No files found in model directory.")
+else:
+    st.error(f"❌ MODEL_DIR not found: {MODEL_DIR}")
 
 # --- Load Whisper model safely ---
 try:
