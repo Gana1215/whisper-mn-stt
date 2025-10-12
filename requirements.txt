@@ -1,35 +1,5 @@
-# ===============================================
-# Whisper Mongolian STT (Fine-tuning + Streamlit)
-# ===============================================
-
-# --- Core Deep Learning & Audio ---
+transformers>=4.35.0
 torch
 torchaudio
-soundfile
-#torchcodec
-
-# --- Transformers & NLP ---
-transformers>=4.41.0
-datasets
-evaluate
-jiwer
-
-# --- Streamlit App & UI Components ---
 streamlit
-audio-recorder-streamlit
-streamlit-aggrid
-gdown
-
-# --- Data Handling & Utilities ---
-pandas
-numpy
-tqdm
-#dropbox
-#git+https://github.com/stefanrmmr/streamlit-audiorec.git#egg=st_audiorec
-#streamlit-audiorec-mirror
-streamlit-audiorec
-# --- Visualization / Plotting (optional) ---
-matplotlib
-
-# --- Optional: For Colab sharing (if needed later) ---
-# pyngrok
+requests
