@@ -25,18 +25,10 @@ st.set_page_config(page_title="Mongolian Whisper STT", layout="centered")
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+MN&display=swap');
-html, body, [class*="css"] {
-    font-family: 'Noto Sans MN', sans-serif;
-}
-h1, h2, h3 {
-    color: #1a73e8;
-    text-align: center;
-}
+html, body, [class*="css"] { font-family: 'Noto Sans MN', sans-serif; }
+h1, h2, h3 { color: #1a73e8; text-align: center; }
 div[data-testid="stMarkdownContainer"] h2 {
-    background-color: #f1f3f4;
-    border-radius: 12px;
-    padding: 10px;
-    text-align: center;
+    background-color: #f1f3f4; border-radius: 12px; padding: 10px; text-align: center;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -59,8 +51,7 @@ def download_and_extract_model():
         r = requests.get(MODEL_ZIP_URL, stream=True)
         with open(MODEL_ZIP, "wb") as f:
             for chunk in r.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
+                if chunk: f.write(chunk)
         st.success("✅ Download complete!")
 
     if not os.path.exists(MODEL_DIR):
@@ -99,26 +90,27 @@ generate_kwargs = {
 }
 
 # ===============================================
-# 🧹 Silence Trimmer
-# ===============================================
-# ===============================================
-# 🧹 Silence Trimmer (safe version)
+# 🧹 Silence Trimmer (safe)
 # ===============================================
 def trim_silence(audio_tensor, sr=16000, thresh=0.005):
-    """Trim leading and trailing silence from an audio tensor safely."""
+    """Trim leading and trailing silence safely (handles short clips)."""
     if not isinstance(audio_tensor, torch.Tensor):
         audio_tensor = torch.tensor(audio_tensor, dtype=torch.float32)
-    if audio_tensor.numel() < sr * 0.03:  # < 30 ms
-        return audio_tensor  # too short, skip trimming
+    if audio_tensor.numel() == 0:
+        return audio_tensor
+    # normalize to avoid thresh mis-detection
+    maxv = audio_tensor.abs().max()
+    if maxv > 0:
+        audio_tensor = audio_tensor / (maxv + 1e-8)
 
-    # normalize
-    audio_tensor = audio_tensor / (audio_tensor.abs().max() + 1e-8)
+    frame_len = int(sr * 0.03)  # 30ms
+    if audio_tensor.numel() < frame_len:
+        return audio_tensor  # too short
 
-    frame_len = int(sr * 0.03)
     try:
         frames = audio_tensor.unfold(0, frame_len, frame_len)
     except RuntimeError:
-        return audio_tensor  # audio shorter than frame
+        return audio_tensor
 
     energy = (frames ** 2).mean(dim=1)
     mask = energy > thresh
@@ -128,33 +120,75 @@ def trim_silence(audio_tensor, sr=16000, thresh=0.005):
     start = (mask.int().argmax().item()) * frame_len
     end = (len(mask) - torch.flip(mask.int(), [0]).argmax().item()) * frame_len
     trimmed = audio_tensor[start:end].contiguous()
+    return trimmed if trimmed.numel() > 0 else audio_tensor
 
-    # ensure not empty
-    if trimmed.numel() == 0:
-        trimmed = audio_tensor
-    return trimmed
 # ===============================================
-# 🎛 Mode Selector (independent states per mode)
+# 🧠 Session State
+# ===============================================
+def reset_states():
+    st.session_state["recognized_text_record"] = ""
+    st.session_state["recognized_text_upload"] = ""
+    st.session_state["record_audio_bytes"] = None
+    st.session_state["is_processing"] = False
+
+# init
+for k, v in {
+    "recognized_text_record": "",
+    "recognized_text_upload": "",
+    "record_audio_bytes": None,
+    "is_processing": False,
+    "mode": "🎙️ Record Voice",
+}.items():
+    st.session_state.setdefault(k, v)
+
+def on_mode_change():
+    reset_states()
+
+# ===============================================
+# 🎛 Mode Selector (no rerun, clean reset)
 # ===============================================
 st.markdown("---")
-mode = st.selectbox("Select Mode", ["🎙️ Record Voice", "📂 Upload Audio File"], key="mode_selector")
-
-# Independent session states
-if "recognized_text_record" not in st.session_state:
-    st.session_state["recognized_text_record"] = ""
-if "recognized_text_upload" not in st.session_state:
-    st.session_state["recognized_text_upload"] = ""
-
-# Clear data on mode switch
-st.session_state.setdefault("last_mode", None)
-if st.session_state["last_mode"] != mode:
-    st.session_state["last_mode"] = mode
-    st.session_state["recognized_text_record"] = ""
-    st.session_state["recognized_text_upload"] = ""
-    st.rerun()
+mode = st.selectbox(
+    "Select Mode",
+    ["🎙️ Record Voice", "📂 Upload Audio File"],
+    index=0 if st.session_state["mode"] == "🎙️ Record Voice" else 1,
+    key="mode",
+    on_change=on_mode_change,
+)
 
 # ===============================================
-# 🎤 RECORD MODE
+# 🧩 helpers: run transcription
+# ===============================================
+def transcribe_waveform(waveform, sr=16000):
+    status = st.info("⏳ Converting to text...")
+    try:
+        inputs = processor(waveform.numpy(), sampling_rate=sr, return_tensors="pt")
+        with torch.no_grad():
+            predicted_ids = model.generate(**inputs, **generate_kwargs)
+        text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+        status.empty()
+        st.success("✅ Recognition complete!")
+        return text
+    except Exception as e:
+        status.empty()
+        st.error(f"❌ Error during transcription: {e}")
+        return ""
+
+def load_and_prepare_wav(path):
+    data, sr = sf.read(path)
+    if len(data.shape) > 1:
+        data = data.mean(axis=1)
+    data = torch.tensor(data, dtype=torch.float32)
+    data = trim_silence(data, sr=sr)
+    # resample to 16k? soundfile doesn't resample; keep sr as-is if model supports 16k frontend.
+    # Whisper expects 16k features; processor will handle resampling internally if needed in latest versions,
+    # but to be safe we write back at 16k.
+    target_sr = 16000
+    sf.write(path, data.numpy(), target_sr)
+    return data, target_sr
+
+# ===============================================
+# 🎤 RECORD MODE (explicit button to transcribe after STOP)
 # ===============================================
 if mode == "🎙️ Record Voice":
     if not HAS_RECORDER:
@@ -163,32 +197,35 @@ if mode == "🎙️ Record Voice":
         st.subheader("🎙️ Record your voice below:")
         wav_audio_data = st_audiorec()
 
-        if wav_audio_data is not None:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                tmp.write(wav_audio_data)
-                temp_path = tmp.name
+        # store the last completed recording bytes (component returns bytes after STOP)
+        if wav_audio_data and len(wav_audio_data) > 0:
+            st.session_state["record_audio_bytes"] = wav_audio_data
 
-            data, sr = sf.read(temp_path)
-            if len(data.shape) > 1:
-                data = data.mean(axis=1)
-            data = torch.tensor(data, dtype=torch.float32)
-            data = trim_silence(data)
-            sr = 16000
-            sf.write(temp_path, data.numpy(), sr)
+        # show preview & transcribe button only when we have a completed recording
+        if st.session_state["record_audio_bytes"] is not None:
+            st.audio(st.session_state["record_audio_bytes"], format="audio/wav")
+            col1, col2 = st.columns([1,1])
+            with col1:
+                do_transcribe = st.button("📝 Transcribe recording", disabled=st.session_state["is_processing"])
+            with col2:
+                if st.button("🔁 Reset recording"):
+                    st.session_state["record_audio_bytes"] = None
+                    st.session_state["recognized_text_record"] = ""
 
-            status = st.info("🎙️ Converting your recorded voice to text...")
-            try:
-                inputs = processor(data.numpy(), sampling_rate=sr, return_tensors="pt")
-                with torch.no_grad():
-                    predicted_ids = model.generate(**inputs, **generate_kwargs)
-                recognized_text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
-                st.session_state["recognized_text_record"] = recognized_text
-                status.empty()
-                st.success("✅ Recognition complete!")
-            except Exception as e:
-                status.empty()
-                st.error(f"❌ Error during recognition: {e}")
+            if do_transcribe:
+                st.session_state["is_processing"] = True
+                # write to temp and process
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                    tmp.write(st.session_state["record_audio_bytes"])
+                    temp_path = tmp.name
+                try:
+                    data, sr = load_and_prepare_wav(temp_path)
+                    text = transcribe_waveform(data, sr)
+                    st.session_state["recognized_text_record"] = text
+                finally:
+                    st.session_state["is_processing"] = False
 
+        # show recognized text (editable)
         if st.session_state["recognized_text_record"]:
             st.markdown("### 🗣️ Recognized Text:")
             final_text = st.text_area(
@@ -200,7 +237,7 @@ if mode == "🎙️ Record Voice":
             st.download_button("💾 Save text result", final_text, "recognized_text_record.txt", mime="text/plain")
 
 # ===============================================
-# 📂 UPLOAD MODE
+# 📂 UPLOAD MODE (explicit button to transcribe)
 # ===============================================
 elif mode == "📂 Upload Audio File":
     st.subheader("📂 Upload a .wav file for transcription:")
@@ -208,34 +245,18 @@ elif mode == "📂 Upload Audio File":
 
     if uploaded_file is not None:
         st.audio(uploaded_file, format="audio/wav")
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-            tmp.write(uploaded_file.read())
-            temp_path = tmp.name
-
-        try:
-            data, sr = sf.read(temp_path)
-            if len(data.shape) > 1:
-                data = data.mean(axis=1)
-            data = torch.tensor(data, dtype=torch.float32)
-            data = trim_silence(data)
-            sr = 16000
-            sf.write(temp_path, data.numpy(), sr)
-        except Exception as e:
-            st.error(f"❌ Failed to read audio: {e}")
-            st.stop()
-
-        status = st.info("🎙️ Converting uploaded file to text...")
-        try:
-            inputs = processor(data.numpy(), sampling_rate=sr, return_tensors="pt")
-            with torch.no_grad():
-                predicted_ids = model.generate(**inputs, **generate_kwargs)
-            recognized_text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
-            st.session_state["recognized_text_upload"] = recognized_text
-            status.empty()
-            st.success("✅ Recognition complete!")
-        except Exception as e:
-            status.empty()
-            st.error(f"❌ Error during transcription: {e}")
+        do_transcribe = st.button("📝 Transcribe file", disabled=st.session_state["is_processing"])
+        if do_transcribe:
+            st.session_state["is_processing"] = True
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                tmp.write(uploaded_file.read())
+                temp_path = tmp.name
+            try:
+                data, sr = load_and_prepare_wav(temp_path)
+                text = transcribe_waveform(data, sr)
+                st.session_state["recognized_text_upload"] = text
+            finally:
+                st.session_state["is_processing"] = False
 
     if st.session_state["recognized_text_upload"]:
         st.markdown("### 🗣️ Recognized Text:")
