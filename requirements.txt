@@ -1,6 +1,18 @@
-transformers==4.45.1
-torch
-soundfile
-streamlit
-requests
-av
+# Core Streamlit
+streamlit>=1.37.0
+
+# Whisper model
+transformers>=4.44.0
+torch>=2.2.0
+torchaudio>=2.2.0
+
+# Audio + File utilities
+soundfile>=0.12.1
+numpy>=1.26.4
+requests>=2.32.0
+
+# Recorder (optional, auto-disabled if unavailable)
+#git+https://github.com/stefanrmmr/streamlit-audiorec.git
+streamlit-audiorec
+# For better error formatting
+rich>=13.7.0
