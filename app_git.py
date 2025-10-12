@@ -15,8 +15,7 @@ st.set_page_config(page_title="Whisper Mongolian STT", layout="centered")
 st.title("🎙️ Mongolian Speech-to-Text (Whisper Anti-Hallucination Edition)")
 
 # --- Dropbox public link ---
-DROPBOX_MODEL_URL = "https://www.dropbox.com/scl/fi/k33mfgw2r05we2t636zgi/checkpoint-3500.zip?rlkey=s5x0os8hoktpu1mbzbg5pfhoy&st=zxpg2fxn&dl=1
-"
+DROPBOX_MODEL_URL = "https://www.dropbox.com/scl/fi/k33mfgw2r05we2t636zgi/checkpoint-3500.zip?rlkey=s5x0os8hoktpu1mbzbg5pfhoy&st=zxpg2fxn&dl=1"
 
 MODEL_DIR = "./models/checkpoint-3500"
 # ===============================================
