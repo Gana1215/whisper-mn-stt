@@ -11,7 +11,9 @@ import streamlit as st
 from transformers import pipeline, WhisperProcessor, WhisperForConditionalGeneration
 
 # --- Constants ---
-MODEL_DIR = "./models/checkpoint-3500"
+#MODEL_DIR = "./models/checkpoint-3500"
+MODEL_DIR = "./models"
+
 MODEL_ZIP_URL = "https://www.dropbox.com/scl/fi/k33mfgw2r05we2t636zgi/checkpoint-3500.zip?rlkey=s5x0os8hoktpu1mbzbg5pfhoy&st=zxpg2fxn&dl=1"
 os.makedirs("./models", exist_ok=True)
 
