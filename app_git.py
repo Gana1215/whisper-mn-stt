@@ -101,18 +101,38 @@ generate_kwargs = {
 # ===============================================
 # 🧹 Silence Trimmer
 # ===============================================
+# ===============================================
+# 🧹 Silence Trimmer (safe version)
+# ===============================================
 def trim_silence(audio_tensor, sr=16000, thresh=0.005):
+    """Trim leading and trailing silence from an audio tensor safely."""
+    if not isinstance(audio_tensor, torch.Tensor):
+        audio_tensor = torch.tensor(audio_tensor, dtype=torch.float32)
+    if audio_tensor.numel() < sr * 0.03:  # < 30 ms
+        return audio_tensor  # too short, skip trimming
+
+    # normalize
+    audio_tensor = audio_tensor / (audio_tensor.abs().max() + 1e-8)
+
     frame_len = int(sr * 0.03)
-    frames = audio_tensor.unfold(0, frame_len, frame_len)
+    try:
+        frames = audio_tensor.unfold(0, frame_len, frame_len)
+    except RuntimeError:
+        return audio_tensor  # audio shorter than frame
+
     energy = (frames ** 2).mean(dim=1)
     mask = energy > thresh
     if not mask.any():
         return audio_tensor
-    mask_int = mask.int()
-    start = (mask_int.argmax().item()) * frame_len
-    end = (len(mask_int) - torch.flip(mask_int, [0]).argmax().item()) * frame_len
-    return audio_tensor[start:end].contiguous()
 
+    start = (mask.int().argmax().item()) * frame_len
+    end = (len(mask) - torch.flip(mask.int(), [0]).argmax().item()) * frame_len
+    trimmed = audio_tensor[start:end].contiguous()
+
+    # ensure not empty
+    if trimmed.numel() == 0:
+        trimmed = audio_tensor
+    return trimmed
 # ===============================================
 # 🎛 Mode Selector (independent states per mode)
 # ===============================================
