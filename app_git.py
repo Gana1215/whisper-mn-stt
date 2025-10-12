@@ -1,126 +1,112 @@
 # ===============================================
-# 🎙️ Whisper Mongolian STT — Cloud Safe Version
+# 🎙️ Whisper MN Streamlit App (Cloud + Local)
 # ===============================================
+
 import os
-import torch
-import torchaudio
-import tempfile
-import streamlit as st
-import requests
+import io
 import zipfile
+import requests
+import torch
+import streamlit as st
 from transformers import pipeline, WhisperProcessor, WhisperForConditionalGeneration
 
-# --- Streamlit page setup ---
-st.set_page_config(page_title="Whisper Mongolian STT", layout="centered")
-st.title("🎙️ Mongolian Speech-to-Text (Whisper Anti-Hallucination Edition)")
-
-# --- Dropbox public link ---
-DROPBOX_MODEL_URL = "https://www.dropbox.com/scl/fi/k33mfgw2r05we2t636zgi/checkpoint-3500.zip?rlkey=s5x0os8hoktpu1mbzbg5pfhoy&st=zxpg2fxn&dl=1"
-
+# --- Constants ---
 MODEL_DIR = "./models/checkpoint-3500"
-# ===============================================
-# 📦 Model Downloader + Safe Loader (Dropbox → Local)
-# ===============================================
-import os, zipfile, requests, streamlit as st
-from transformers import WhisperProcessor, WhisperForConditionalGeneration
+MODEL_ZIP_URL = "https://www.dropbox.com/scl/fi/k33mfgw2r05we2t636zgi/checkpoint-3500.zip?rlkey=s5x0os8hoktpu1mbzbg5pfhoy&st=zxpg2fxn&dl=1"
+os.makedirs("./models", exist_ok=True)
 
-MODEL_DIR = "./models/checkpoint-3500"
-MODEL_ZIP = "./checkpoint-3500.zip"
-
-# 🔗 Dropbox direct link (note: use ?dl=1 at the end!)
-DROPBOX_URL = "https://www.dropbox.com/scl/fo/sruai8kxjto7b9qaq334f/AOQ7s1VL6nGLVjgGS3VSLOM?rlkey=52dakrqa4zfbqknhibv0tcrlt&dl=1"
-
+# ======================================================
+# 🔽 Download + Extract Model (only once per fresh start)
+# ======================================================
 def download_and_extract_model():
-    """Download fine-tuned Whisper model from Dropbox if not present locally."""
-    tokenizer_file = os.path.join(MODEL_DIR, "tokenizer.json")
-
-    if os.path.exists(tokenizer_file):
-        st.info("✅ Model already exists locally — skipping download.")
+    if os.path.exists(MODEL_DIR):
+        st.success(f"✅ Model already exists at {MODEL_DIR}")
         return
 
-    st.info("📥 Downloading model from Dropbox (first-time only)...")
-    os.makedirs("models", exist_ok=True)
+    zip_path = "./models/checkpoint-3500.zip"
+    st.info("⬇️ Downloading model from Dropbox...")
 
-    # Download with progress
-    r = requests.get(DROPBOX_URL, stream=True)
-    total = int(r.headers.get("content-length", 0))
-    with open(MODEL_ZIP, "wb") as f:
-        for chunk in r.iter_content(8192):
-            f.write(chunk)
+    response = requests.get(MODEL_ZIP_URL, stream=True)
+    if response.status_code != 200:
+        st.error(f"❌ Download failed (status {response.status_code})")
+        return
 
-    # Extract zip
-    with zipfile.ZipFile(MODEL_ZIP, "r") as zip_ref:
-        zip_ref.extractall("models")
-    os.remove(MODEL_ZIP)
-    st.success("✅ Model downloaded and extracted!")
+    total_size = int(response.headers.get("content-length", 0))
+    block_size = 1024 * 1024  # 1MB
+    with open(zip_path, "wb") as f:
+        for chunk in response.iter_content(block_size):
+            if chunk:
+                f.write(chunk)
+    st.success("✅ Download complete!")
 
-# --- Run setup ---
+    st.info("📦 Extracting model files...")
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_ref.extractall("./models")
+
+    if os.path.exists(MODEL_DIR):
+        st.success("✅ Model extracted successfully!")
+    else:
+        st.error("❌ Extraction failed — MODEL_DIR not found after unzip.")
+
+# ======================================================
+# 🧭 Debug Info (see working dir + files in Streamlit Cloud)
+# ======================================================
+st.markdown("### 🧭 Environment Debug Info")
+st.write(f"**Current Working Directory:** `{os.getcwd()}`")
+
+dirs = [d for d in os.listdir('.') if os.path.isdir(d)]
+files = [f for f in os.listdir('.') if os.path.isfile(f)]
+st.write("📂 **Folders in root:**", dirs)
+st.write("📄 **Files in root:**", files)
+
+# ======================================================
+# ⚙️ Ensure model is available
+# ======================================================
 download_and_extract_model()
-# --- Debug: Inspect extracted model directory ---
-st.markdown("### 🧾 Model directory contents:")
-if os.path.exists(MODEL_DIR):
-    files = []
-    for root, dirs, filenames in os.walk(MODEL_DIR):
-        for name in filenames:
-            rel_path = os.path.relpath(os.path.join(root, name), MODEL_DIR)
-            files.append(rel_path)
-    st.code("\n".join(files) if files else "⚠️ No files found in model directory.")
-else:
-    st.error(f"❌ MODEL_DIR not found: {MODEL_DIR}")
 
-# --- Load Whisper model safely ---
+if not os.path.exists(MODEL_DIR):
+    st.error(f"❌ MODEL_DIR not found: {MODEL_DIR}")
+    st.write("📂 Available inside ./models:", os.listdir("./models") if os.path.exists("./models") else "models folder missing")
+    st.stop()
+else:
+    files = os.listdir(MODEL_DIR)
+    st.success(f"✅ MODEL_DIR found: {MODEL_DIR}")
+    st.write(f"📦 Found {len(files)} files:", files[:10])
+
+# ======================================================
+# 🧠 Load Whisper Model (with fallback)
+# ======================================================
 try:
     processor = WhisperProcessor.from_pretrained(MODEL_DIR)
     model = WhisperForConditionalGeneration.from_pretrained(MODEL_DIR)
-    st.success("✅ Fine-tuned Whisper model loaded!")
+    st.success("✅ Fine-tuned Whisper model loaded successfully!")
 except Exception as e:
-    st.error(f"⚠️ Could not load fine-tuned model: {e}")
-    st.warning("Loading fallback model: openai/whisper-tiny")
+    st.warning(f"⚠️ Could not load fine-tuned model: {e}")
+    st.info("Loading fallback model: openai/whisper-tiny ...")
     processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
     model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
 
-# --- Load Whisper model ---
-processor = WhisperProcessor.from_pretrained(MODEL_DIR)
-model = WhisperForConditionalGeneration.from_pretrained(MODEL_DIR)
+# ======================================================
+# 🎙️ App Interface
+# ======================================================
+st.title("🎧 Mongolian Whisper Speech-to-Text")
+st.write("Record or upload Mongolian audio and transcribe using Whisper!")
 
-forced_ids = processor.get_decoder_prompt_ids(language="mn", task="transcribe")
-generate_kwargs = {
-    "forced_decoder_ids": forced_ids,
-    "do_sample": False,
-    "temperature": 0.0,
-    "num_beams": 5,
-    "max_new_tokens": 32,
-    "no_repeat_ngram_size": 3,
-    "repetition_penalty": 1.05,
-    "length_penalty": 0.1,
-}
-asr = pipeline(
-    task="automatic-speech-recognition",
-    model=model,
-    tokenizer=processor.tokenizer,
-    feature_extractor=processor.feature_extractor,
-    chunk_length_s=15,
-    stride_length_s=(2, 2),
-    generate_kwargs=generate_kwargs,
-    device=0 if torch.cuda.is_available() else -1,
-)
-st.success("✅ Model loaded and ready!")
+uploaded_file = st.file_uploader("Upload a .wav file", type=["wav"])
 
-# --- File uploader ---
-uploaded_file = st.file_uploader("🎤 Upload your voice file (WAV/MP3)", type=["wav", "mp3"])
 if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-        tmp.write(uploaded_file.read())
-        temp_path = tmp.name
+    st.audio(uploaded_file, format="audio/wav")
 
-    # Load + preprocess
-    wav, sr = torchaudio.load(temp_path)
-    if wav.shape[0] > 1:
-        wav = torch.mean(wav, dim=0, keepdim=True)
-    wav = torchaudio.functional.resample(wav, sr, 16000)
-    torchaudio.save(temp_path, wav, 16000)
+    # Save temp file
+    with open("temp.wav", "wb") as f:
+        f.write(uploaded_file.read())
 
-    st.info("⏳ Recognizing speech...")
-    result = asr(temp_path)
-    st.success("✅ Recognition complete!")
-    st.markdown(f"### 🗣️ Recognized Text:\n\n**{result['text']}**")
+    # Load + transcribe
+    try:
+        pipe = pipeline("automatic-speech-recognition", model=model, tokenizer=processor.tokenizer)
+        st.info("⏳ Transcribing...")
+        result = pipe("temp.wav", generate_kwargs={"task": "transcribe", "language": "mn"})
+        st.success("✅ Transcription complete:")
+        st.text_area("Recognized text:", result["text"], height=200)
+    except Exception as e:
+        st.error(f"❌ Error during transcription: {e}")
