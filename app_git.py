@@ -39,7 +39,7 @@ st.write(os.listdir("."))
 # ===============================================
 # 📦 Model Download + Extraction
 # ===============================================
-MODEL_ZIP_URL = "https://www.dropbox.com/scl/fi/k33mfgw2r05we2t636zgi/checkpoint-3500.zip?rlkey=s5x0os8hoktpu1mbzbg5pfhoy&dl=1"
+MODEL_ZIP_URL = "https://www.dropbox.com/scl/fi/8nmh0twbvhjvrxdvyui0t/checkpoint-3500.zip?rlkey=klfvnm6dble9oxsplwa03y42h&st=xpmhlgr0&dl=0"
 MODEL_DIR = "./models"
 MODEL_ZIP = os.path.join(MODEL_DIR, "checkpoint-3500.zip")
 
