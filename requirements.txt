@@ -5,7 +5,7 @@
 
 # ----- Core UI -----
 streamlit==1.38.0
-git+https://github.com/stefanrmmr/streamlit-audiorec.git
+streamlit-audiorec
 
 # ----- Whisper / STT Engine -----
 faster-whisper==1.0.3
