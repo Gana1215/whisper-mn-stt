@@ -10,7 +10,8 @@ streamlit==1.38.0
 streamlit-audiorec
 # Fast Whisper (STT Engine)
 faster-whisper==1.0.3
-ctranslate2==4.4.0
+#ctranslate2==4.4.0
+ctranslate2>=4.6.0
 
 # Core audio + numerical processing
 soundfile
