@@ -19,7 +19,7 @@ numpy
 
 # CPU-safe PyTorch versions (no CUDA needed)
 #torch==2.2.2+cpu
-torch>=2.5.0
+torch>=2.5.0 
 
 torchaudio==2.2.2+cpu
 --extra-index-url https://download.pytorch.org/whl/cpu
