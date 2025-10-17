@@ -1,13 +1,12 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v2.9.4 — Trace Edition)
-# ✅ Auto Recorder Refresh • Single Result Render • Compatibility-safe transcription
+# 🎙️ Mongolian Fast-Whisper STT (v2.9.6 — Trace Edition, Stable Recorder)
+# ✅ Stable recorder key • Manual reset • Retry kept • Temp-file cleanup
 # ===============================================
 
 import streamlit as st
-import torch, logging, sys, io, time, tempfile, platform, concurrent.futures, inspect
+import torch, logging, sys, io, time, tempfile, platform, concurrent.futures, inspect, os
 import numpy as np, soundfile as sf, scipy.signal, av
 from faster_whisper import WhisperModel
-import os
 
 # ---------- CPU & threading guards ----------
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -28,7 +27,6 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 def trace(msg: str):
-    """Display trace in both UI and backend logs."""
     st.caption(f"🧭 {msg}")
     logger.info(msg)
 
@@ -50,8 +48,8 @@ button[data-testid="stAudioInput__stop"]{background:linear-gradient(90deg,#d32f2
 """, unsafe_allow_html=True)
 
 st.markdown("<h1>🎙️ Mongolian Fast-Whisper STT</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>(Anti-Hallucination Edition — Trace & Auto Refresh)</p>", unsafe_allow_html=True)
-st.caption("⚡ Fine-tuned Mongolian Whisper model with full trace diagnostics and automatic recorder refresh")
+st.markdown("<p class='subtitle'>(Anti-Hallucination Edition — Trace & Stable Recorder)</p>", unsafe_allow_html=True)
+st.caption("⚡ Fine-tuned Mongolian Whisper model with full trace diagnostics and reliable recording")
 
 # ---------- MODEL LOAD ----------
 system, processor = platform.system().lower(), platform.processor().lower()
@@ -66,9 +64,8 @@ with st.spinner("🔁 Loading Whisper model..."):
     model = load_model()
 st.success("✅ Model loaded successfully!")
 
-# ---------- TRANSCRIBE HELPER ----------
+# ---------- TRANSCRIBE HELPER (compat with old/new faster-whisper) ----------
 def transcribe_compat(model, path, **kwargs):
-    """Handles both show_progress/log_progress versions."""
     sig = inspect.signature(model.transcribe)
     if "show_progress" in sig.parameters:
         kwargs["show_progress"] = False
@@ -87,8 +84,7 @@ def decode_webm_to_float32_mono_16k(webm_bytes: bytes):
         for frame in packet.decode():
             f = resampler.resample(frame)
             arr = f.to_ndarray()
-            if arr.ndim > 1:
-                arr = np.mean(arr, axis=0)
+            if arr.ndim > 1: arr = np.mean(arr, axis=0)
             chunks.append(arr.astype(np.float32) / 32768.0)
     container.close()
     if not chunks:
@@ -99,20 +95,18 @@ def decode_webm_to_float32_mono_16k(webm_bytes: bytes):
 
 def ensure_mono_16k(data: np.ndarray, sr: int):
     trace(f"Stage 2: Resampling to 16 kHz (current sr={sr})...")
-    if data.ndim > 1:
-        data = np.mean(data, axis=1)
-    if sr != 16000:
-        data = scipy.signal.resample_poly(data, 16000, sr)
-        sr = 16000
+    if data.ndim > 1: data = np.mean(data, axis=1)
+    if sr != 16000: data = scipy.signal.resample_poly(data, 16000, sr); sr = 16000
     return np.nan_to_num(data.astype(np.float32)), sr
 
 def write_temp_wav(data: np.ndarray, sr: int):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-        sf.write(tmp, data, sr)
-        trace(f"Stage 2: Temporary WAV written → {tmp.name}")
-        return tmp.name
+    fd, path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    sf.write(path, data, sr)
+    trace(f"Stage 2: Temporary WAV written → {path}")
+    return path
 
-# ---------- SAFE TRANSCRIBE ----------
+# ---------- SAFE TRANSCRIBE (timeout + trace) ----------
 def safe_transcribe(wav_path: str):
     trace("Stage 3: Starting model.transcribe()…")
     try:
@@ -141,7 +135,7 @@ def safe_transcribe(wav_path: str):
     finally:
         trace("Stage 3: Exited transcription thread.")
 
-# ---------- WARM-UP ----------
+# ---------- WARM-UP (non-blocking failure) ----------
 if "warmup_done" not in st.session_state:
     st.session_state["warmup_done"] = True
     try:
@@ -149,35 +143,51 @@ if "warmup_done" not in st.session_state:
         sr = 16000
         warm = np.zeros(int(0.4 * sr), dtype=np.float32)
         path = write_temp_wav(warm, sr)
-        transcribe_compat(model, path, language="mn", beam_size=1)
-        trace("Warm-up done.")
+        try:
+            transcribe_compat(model, path, language="mn", beam_size=1)
+            trace("Warm-up done.")
+        finally:
+            try: os.unlink(path)
+            except Exception: pass
     except Exception as e:
         trace(f"Warm-up failed: {e}")
+
+# ---------- STATE PREP ----------
+if "last_text" not in st.session_state:
+    st.session_state["last_text"] = ""
+if "last_audio_bytes" not in st.session_state:
+    st.session_state["last_audio_bytes"] = None
+if "recorder_refresh" not in st.session_state:
+    st.session_state["recorder_refresh"] = 0
 
 # ---------- MAIN UI ----------
 st.subheader("🎤 Record your voice below")
 st.write("Click the mic icon, speak in Mongolian, then click stop to transcribe:")
-st.caption("🟢 Note: The first recording may show 'An error occurred' as your browser initializes the mic. Simply click Start again.")
+st.caption("🟢 Tip: If the first try shows an error while your browser initializes the mic, just press Start again.")
 
-# Ensure UI area cleared before new text (prevents double render)
-if "last_text" not in st.session_state:
-    st.session_state["last_text"] = ""
-
-# Unique key ensures new widget instance for each recording
-audio_file = st.audio_input("🎙️ Start recording", key=f"rec_{int(time.time())}")
+# Stable key; manual reset when needed
+colA, colB = st.columns([3,1])
+with colA:
+    audio_file = st.audio_input("🎙️ Start recording", key=f"recorder_input_{st.session_state['recorder_refresh']}")
+with colB:
+    if st.button("🧹 Reset recorder"):
+        st.session_state["recorder_refresh"] += 1
+        st.rerun()
 
 def handle_audio(audio_bytes: bytes, mime: str):
     trace("Stage 1: Received audio from recorder_input.")
     if not audio_bytes or len(audio_bytes) < 800:
         trace("Stage 1: Empty or too-short buffer (<800 B).")
-        st.warning("🎙️ Microphone initializing — please click Start again.")
+        st.warning("🎙️ Microphone initializing — please click Start again or press Reset.")
         return
-    time.sleep(0.3)
 
+    time.sleep(0.25)  # let browser flush
     try:
-        if "webm" in (mime or ""):
+        mt = (mime or "").lower()
+        if "webm" in mt or "opus" in mt or "ogg" in mt:
             data, sr = decode_webm_to_float32_mono_16k(audio_bytes)
         else:
+            # default to WAV/PCM
             trace("Stage 2: Reading as WAV/PCM via soundfile…")
             data, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32")
             data, sr = ensure_mono_16k(data, sr)
@@ -193,14 +203,16 @@ def handle_audio(audio_bytes: bytes, mime: str):
 
     tmp = write_temp_wav(data, sr)
     st.info("⏳ Recognizing Mongolian speech…")
-
     t0 = time.time()
-    segments, info = safe_transcribe(tmp)
+    try:
+        segments, info = safe_transcribe(tmp)
+    finally:
+        try: os.unlink(tmp)
+        except Exception: pass
     dt = time.time() - t0
 
     text = " ".join([s.text.strip() for s in segments if getattr(s, "text", "").strip()]) if segments else ""
-
-    st.session_state["last_text"] = text  # ✅ store latest text
+    st.session_state["last_text"] = text
 
     if text:
         trace("Stage 4: Recognition successful.")
@@ -217,15 +229,17 @@ def handle_audio(audio_bytes: bytes, mime: str):
 # ---------- EXECUTION FLOW ----------
 if audio_file is not None:
     trace("Stage 0: Audio input triggered.")
-    st.session_state["last_audio_bytes"] = None  # clear
+    st.session_state["last_audio_bytes"] = None  # clear previous
     try:
         audio_bytes = audio_file.read()
-        if audio_bytes:
-            st.session_state["last_audio_bytes"] = (audio_bytes, audio_file.type)
-            handle_audio(audio_bytes, audio_file.type)
+        # Some browsers give None for type; guess webm if missing
+        mime = audio_file.type or "audio/webm"
+        if audio_bytes and len(audio_bytes) > 800:
+            st.session_state["last_audio_bytes"] = (audio_bytes, mime)
+            handle_audio(audio_bytes, mime)
         else:
-            trace("Stage 0: Empty buffer, skipping.")
-            st.warning("🎙️ Empty recording — please retry.")
+            trace("Stage 0: Empty/short buffer, skipping.")
+            st.warning("🎙️ Empty recording — please try again or press Reset.")
     except Exception as e:
         trace(f"Top-level ERROR: {e}")
         st.error(f"❌ Unexpected error: {e}")
@@ -233,7 +247,7 @@ else:
     trace("Stage 0: Waiting for recording input.")
     st.info("⏺️ Waiting for you to record…")
 
-# Retry button always available
+# ---------- RETRY LAST AUDIO (kept) ----------
 if st.button("🔁 Retry last audio"):
     trace("Retry button clicked.")
     if st.session_state.get("last_audio_bytes"):
@@ -242,7 +256,7 @@ if st.button("🔁 Retry last audio"):
     else:
         st.info("No previous audio to retry yet.")
 
-# Show last recognized text only once
+# ---------- SINGLE SUMMARY (prevents stacking) ----------
 if st.session_state["last_text"]:
     st.markdown("---")
     st.markdown(
@@ -254,6 +268,6 @@ if st.session_state["last_text"]:
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Trace Edition v2.9.4)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Trace Edition v2.9.6)</p>",
     unsafe_allow_html=True,
 )
