@@ -1,10 +1,10 @@
 # ============================================
-# 🎙️ Mongolian Fast-Whisper STT (Cloud-Stable Final)
-# Compatible with Streamlit Cloud, Python 3.13
+# 🎙️ Mongolian Fast-Whisper STT (Final Cloud Build)
+# Works on Streamlit Cloud (Python 3.13)
 # ============================================
 
 # --- UI ---
-streamlit==1.40.1            # ✅ supports Pillow 11+
+streamlit==1.40.1
 streamlit-audiorec==0.1.3
 
 # --- Core Whisper Runtime ---
@@ -12,18 +12,20 @@ ctranslate2==4.6.0
 transformers==4.45.2
 sentencepiece>=0.1.99
 huggingface-hub>=0.23.0
-faster-whisper==1.0.3
+# ✅ safer, prebuilt version of faster-whisper
+faster-whisper==0.10.1
 
 # --- Audio + Math ---
 soundfile==0.13.1
 numpy>=1.26,<3.0
-pillow==11.0.0                # ✅ now compatible
+pillow>=10.3.0,<11.0      # ✅ streamlit-compatible & prebuilt
+# ⚠️ no explicit "av" — faster-whisper 0.10.1 bundles runtime libs
 
 # --- Torch CPU build ---
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.9.0+cpu
 torchaudio==2.9.0+cpu
---extra-index-url https://download.pytorch.org/whl/cpu
 
 # --- Helpers ---
 platformdirs==4.5.0
-tqdm>=4.67.0
+tqdm==4.66.5              # ✅ last PyPI + CPU mirror compatible version
