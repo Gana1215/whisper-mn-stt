@@ -31,6 +31,11 @@ platformdirs==4.5.0
 # --- Index order: PyPI first (for Pillow) ---
 --index-url https://pypi.org/simple
 --extra-index-url https://download.pytorch.org/whl/cpu
+# --- Helpers ---
+tqdm==4.66.5
+platformdirs==4.5.0
 pydub==0.25.1
 ffmpeg-python==0.2.0
+pyaudioop==0.2.1
+
 
