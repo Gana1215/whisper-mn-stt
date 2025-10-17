@@ -1,28 +1,34 @@
-# ============================================================
-# 🎙️ Mongolian Fast-Whisper STT — Streamlit Cloud Build (Final)
-# ============================================================
+# ============================================
+# 🎙️ Mongolian Fast-Whisper STT (Cloud Stable)
+# ============================================
 
-# --- UI ---
+# UI
 streamlit==1.40.1
 streamlit-audiorec==0.1.3
 
-# --- Core Whisper runtime ---
-ctranslate2==4.6.0
+# Core Whisper runtime
+faster-whisper==1.0.3
+ctranslate2==4.3.1          # ✅ compatible with faster-whisper 1.x
 transformers==4.45.2
 sentencepiece>=0.1.99
 huggingface-hub>=0.23.0
-faster-whisper==1.0.3          # ✅ compatible with CTranslate2 4.x
 
-# --- Audio + Math ---
+# Audio + math
 soundfile==0.13.1
-numpy>=1.26,<3.0
-pillow>=10.3.0,<11.0           # ✅ Streamlit-compatible prebuilt
+numpy>=1.26.4,<3.0
+pillow>=10.0.0,<11.0
 
-# --- Torch CPU build ---
---extra-index-url https://download.pytorch.org/whl/cpu
+# CPU-safe Torch
 torch==2.9.0+cpu
 torchaudio==2.9.0+cpu
 
-# --- Helpers ---
-platformdirs==4.5.0
+# Add the extra index AFTER PyPI, not before
+--index-url https://pypi.org/simple
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Helpers
 tqdm==4.66.5
+platformdirs==4.5.0
+
+# Fix build issues with PyAV (used by faster-whisper)
+av==12.3.0
