@@ -1,6 +1,6 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v2.1 — Final Cloud-Stable)
-# ✅ Enhanced recording buttons + Simplified UI
+# 🎙️ Mongolian Fast-Whisper STT (v2.2 — Cloud-Stable Mobile Edition)
+# ✅ WebM/Opus Auto-Conversion + Enhanced Recording UI
 # ===============================================
 
 import streamlit as st
@@ -12,6 +12,7 @@ import tempfile
 import platform
 import time
 import io
+from pydub import AudioSegment  # 🔄 for WebM→WAV conversion
 
 # ===============================================
 # --- PAGE SETUP & STYLING ---
@@ -118,11 +119,23 @@ audio_file = st.audio_input("🎙️ Start recording")
 
 if audio_file is not None:
     st.success(f"🎧 Recorded audio received — {audio_file.size} bytes")
+    st.write("📁 Audio type:", audio_file.type)
 
-    # --- STEP 1: Decode audio ---
     try:
-        data, sr = sf.read(io.BytesIO(audio_file.read()))
-        st.caption(f"📊 Audio decoded: {data.shape}, {sr} Hz")
+        audio_bytes = audio_file.read()
+
+        # --- Handle WebM (mobile Chrome) ---
+        if "webm" in audio_file.type:
+            st.info("🔄 Converting mobile WebM/Opus audio → WAV format...")
+            audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="webm")
+            buf = io.BytesIO()
+            audio.export(buf, format="wav")
+            data, sr = sf.read(io.BytesIO(buf.getvalue()))
+        else:
+            # --- Handle WAV (desktop browsers) ---
+            data, sr = sf.read(io.BytesIO(audio_bytes))
+
+        st.caption(f"📊 Audio decoded successfully: {data.shape}, {sr} Hz")
 
         # --- STEP 2: Convert to 16kHz mono (for Whisper) ---
         if sr != 16000:
@@ -169,6 +182,6 @@ else:
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.1)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.2)</p>",
     unsafe_allow_html=True
 )
