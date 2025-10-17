@@ -1,6 +1,6 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v2.0 — Final Cloud-Stable)
-# ✅ Replaced streamlit_audio_recorder with st.audio_input
+# 🎙️ Mongolian Fast-Whisper STT (v2.1 — Final Cloud-Stable)
+# ✅ Enhanced recording buttons + Simplified UI
 # ===============================================
 
 import streamlit as st
@@ -44,18 +44,44 @@ div.stButton>button:first-child{
     color:white;font-weight:bold;border-radius:12px;padding:0.6rem 1.2rem;border:none;
 }
 .stSuccess,.stInfo,.stWarning,.stError{border-radius:10px;}
-div[data-testid="stAudioInput"] {
-    text-align:center;
+
+/* 🎤 Center and style audio input widget */
+[data-testid="stAudioInput"] {
+    margin-top: 1.2rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: center;
 }
-div[data-testid="stAudioInput"] label {
-    display:block;
-    font-weight:bold;
-    margin-bottom:0.5rem;
-    font-size:1.1rem;
+
+/* 🟢 Style record button */
+button[data-testid="stAudioInput__record"] {
+    transform: scale(1.5);
+    background: linear-gradient(90deg,#0f4c81,#1f8ac0);
+    color: white !important;
+    border-radius: 50%;
+    border: none;
+    width: 80px !important;
+    height: 80px !important;
+    font-size: 1.1rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+}
+
+/* 🔴 Style stop button */
+button[data-testid="stAudioInput__stop"] {
+    transform: scale(1.5);
+    background: linear-gradient(90deg,#d32f2f,#f44336);
+    color: white !important;
+    border-radius: 50%;
+    border: none;
+    width: 80px !important;
+    height: 80px !important;
+    font-size: 1.1rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
 }
 </style>
 """, unsafe_allow_html=True)
 
+# --- HEADER ---
 st.markdown("<h1>🎙️ Mongolian Fast-Whisper STT</h1>", unsafe_allow_html=True)
 st.markdown("<p class='subtitle'>(Anti-Hallucination Edition — Cloud-Stable)</p>", unsafe_allow_html=True)
 st.caption("⚡ Fine-tuned Mongolian Whisper model with stable cloud inference")
@@ -86,13 +112,12 @@ st.success("✅ Model loaded successfully! Ready to transcribe your voice.")
 # --- AUDIO RECORDING SECTION (st.audio_input) ---
 # ===============================================
 st.subheader("🎤 Record your voice below")
-st.write("Click the record button, speak in Mongolian, then click stop to transcribe:")
+st.write("Click the mic icon, speak in Mongolian, then click stop to transcribe:")
 
 audio_file = st.audio_input("🎙️ Start recording")
 
 if audio_file is not None:
     st.success(f"🎧 Recorded audio received — {audio_file.size} bytes")
-    st.audio(audio_file, format="audio/wav")
 
     # --- STEP 1: Decode audio ---
     try:
@@ -144,6 +169,6 @@ else:
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.0)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.1)</p>",
     unsafe_allow_html=True
 )
