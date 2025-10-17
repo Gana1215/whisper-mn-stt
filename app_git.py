@@ -1,5 +1,5 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v2.4 — Cloud-Stable + Auto Warm-Up)
+# 🎙️ Mongolian Fast-Whisper STT (v2.5 — Cloud-Stable + Auto Warm-Up)
 # ✅ PyAV WebM/Opus, safe I/O, guarded inference, first-click warm-up fix
 # ===============================================
 
@@ -51,7 +51,6 @@ st.success("✅ Model loaded successfully! Ready to transcribe your voice.")
 
 # ---------- Helpers ----------
 def decode_webm_to_float32_mono_16k(webm_bytes: bytes):
-    """Decode WebM/Opus to float32 mono @ 16k via PyAV (no external ffmpeg)."""
     container = av.open(io.BytesIO(webm_bytes))
     astream = next(s for s in container.streams if s.type == "audio")
     resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=16000)
@@ -82,7 +81,7 @@ def write_temp_wav(data: np.ndarray, sr: int) -> str:
         return tmp.name
 
 def safe_transcribe(wav_path: str):
-    """Guarded Faster-Whisper call with parameters tuned for Streamlit Cloud."""
+    """Guarded Faster-Whisper call tuned for Streamlit Cloud compatibility."""
     return model.transcribe(
         wav_path,
         language="mn",
@@ -90,22 +89,17 @@ def safe_transcribe(wav_path: str):
         vad_filter=True,
         suppress_tokens="-1",
         condition_on_previous_text=False,
-        word_timestamps=False,
-        max_batch_size=1,
-        num_workers=1
+        word_timestamps=False
     )
 
 # ---------- One-Time Auto Warm-Up ----------
 if "warmup_done" not in st.session_state:
     try:
-        # Create ~0.4s of near-silence to trigger model graph build & load kernels
         sr = 16000
-        warm = (np.zeros(int(0.4 * sr), dtype=np.float32) + 1e-7)  # tiny epsilon avoids edge cases
+        warm = (np.zeros(int(0.4 * sr), dtype=np.float32) + 1e-7)
         warm_path = write_temp_wav(warm, sr)
-        # Run once; ignore result
         _ = safe_transcribe(warm_path)
     except Exception as e:
-        # Non-fatal; just log to Streamlit
         st.caption(f"🛠 Warm-up note: {e}")
     finally:
         st.session_state["warmup_done"] = True
@@ -113,25 +107,18 @@ if "warmup_done" not in st.session_state:
 # ---------- UI: Recording ----------
 st.subheader("🎤 Record your voice below")
 st.write("Click the mic icon, speak in Mongolian, then click stop to transcribe:")
-
-# Optional: show a small debug toggle
 debug = st.toggle("Show debug info", value=False)
 
 audio_file = st.audio_input("🎙️ Start recording")
-
-# Store last audio for retry
 if "last_audio_bytes" not in st.session_state:
     st.session_state["last_audio_bytes"] = None
 
 def handle_audio_bytes(audio_bytes: bytes, mime: str):
-    """Full guarded pipeline from bytes -> float32 mono 16k -> temp wav -> transcript."""
     if not audio_bytes or len(audio_bytes) < 500:
         st.warning("🕒 Initial microphone warm-up… please record again.")
         return
+    time.sleep(0.3)
 
-    time.sleep(0.3)  # ensure front-end buffer fully flushed
-
-    # Decode
     try:
         if mime and "webm" in mime:
             if debug: st.caption("Decoder: PyAV (WebM/Opus → 16 kHz mono)")
@@ -152,22 +139,18 @@ def handle_audio_bytes(audio_bytes: bytes, mime: str):
     if debug: st.caption(f"📊 Decoded: shape={data.shape}, sr={sr} Hz")
     wav_path = write_temp_wav(data, sr)
 
-    # Concurrency guard
     if st.session_state.get("is_transcribing", False):
         st.warning("⚙️ Already transcribing… please wait.")
         return
     st.session_state["is_transcribing"] = True
 
-    # Transcribe
     st.info("⏳ Recognizing your Mongolian speech…")
     t0 = time.time()
     try:
         segments, info = safe_transcribe(wav_path)
     except Exception as e:
         st.error("❌ Transcription failed. Please record again.")
-        if debug:
-            st.exception(e)
-            traceback.print_exc()
+        if debug: st.exception(e)
         st.session_state["is_transcribing"] = False
         return
 
@@ -187,7 +170,7 @@ def handle_audio_bytes(audio_bytes: bytes, mime: str):
     else:
         st.warning("⚠️ No speech detected. Please try again closer to the mic.")
 
-# Live recording flow
+# ----- Live Recording Flow -----
 if audio_file is not None:
     st.success(f"🎧 Recorded audio received — {audio_file.size} bytes")
     st.caption(f"📁 MIME type: {audio_file.type}")
@@ -200,9 +183,9 @@ if audio_file is not None:
         if debug: st.exception(e)
 else:
     st.info("⏺️ Waiting for you to record…")
-    st.caption("💡 Tip: On the very first click, allow mic access. If nothing transcribes, record once more.")
+    st.caption("💡 Tip: On first click, allow mic access. If nothing transcribes, record once more.")
 
-# Retry last audio (no need to re-record)
+# ---------- Retry + File Upload ----------
 col1, col2 = st.columns([1,3])
 with col1:
     if st.button("🔁 Retry last audio"):
@@ -212,10 +195,17 @@ with col1:
         else:
             st.info("No previous audio to retry yet.")
 
+with col2:
+    upload = st.file_uploader("📂 Or upload .wav / .mp3 / .webm file", type=["wav","mp3","webm"], label_visibility="collapsed")
+    if upload is not None:
+        st.info(f"📥 Uploaded: {upload.name}")
+        audio_bytes = upload.read()
+        handle_audio_bytes(audio_bytes, upload.type or upload.name.split(".")[-1])
+
 # ---------- Footer ----------
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.4)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.5)</p>",
     unsafe_allow_html=True
 )
