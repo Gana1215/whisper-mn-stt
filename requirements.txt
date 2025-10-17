@@ -1,27 +1,13 @@
-# ======================================
-# 🎙️ Mongolian Fast-Whisper STT
-# Streamlit Cloud (Py 3.13 safe)
-# ======================================
-
-# ----- UI -----
 streamlit==1.38.0
 streamlit-audiorec==0.1.3
-
-# ----- Core model runtime (no PyAV) -----
-ctranslate2==4.6.0          # engine for inference
-transformers==4.45.2        # tokenizer & feature extractor
+ctranslate2==4.6.0
+transformers==4.45.2
 sentencepiece==0.2.0
 huggingface-hub==0.35.3
-
-# ----- Audio I/O + math -----
 soundfile==0.13.1
 numpy==2.3.4
 pillow==10.4.0
-
-# ----- PyTorch CPU stack -----
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.9.0+cpu
 torchaudio==2.9.0+cpu
-
-# ----- Misc helpers -----
 platformdirs==4.5.0
