@@ -1,10 +1,9 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v1.9 — Final Cloud-Stable)
-# ✅ Streamlit Cloud Compatible + Anti-Hallucination + Hugging Face Model
+# 🎙️ Mongolian Fast-Whisper STT (v2.0 — Final Cloud-Stable)
+# ✅ Replaced streamlit_audio_recorder with st.audio_input
 # ===============================================
 
 import streamlit as st
-from streamlit_audio_recorder import audio_recorder
 from faster_whisper import WhisperModel
 import soundfile as sf
 import numpy as np
@@ -45,6 +44,15 @@ div.stButton>button:first-child{
     color:white;font-weight:bold;border-radius:12px;padding:0.6rem 1.2rem;border:none;
 }
 .stSuccess,.stInfo,.stWarning,.stError{border-radius:10px;}
+div[data-testid="stAudioInput"] {
+    text-align:center;
+}
+div[data-testid="stAudioInput"] label {
+    display:block;
+    font-weight:bold;
+    margin-bottom:0.5rem;
+    font-size:1.1rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -55,7 +63,6 @@ st.caption("⚡ Fine-tuned Mongolian Whisper model with stable cloud inference")
 # ===============================================
 # --- MODEL LOADING (CACHED) ---
 # ===============================================
-
 system = platform.system().lower()
 processor = platform.processor().lower()
 if "darwin" in system and "apple" in processor:
@@ -76,20 +83,20 @@ with st.spinner("🔁 Loading Whisper model..."):
 st.success("✅ Model loaded successfully! Ready to transcribe your voice.")
 
 # ===============================================
-# --- AUDIO RECORDING SECTION ---
+# --- AUDIO RECORDING SECTION (st.audio_input) ---
 # ===============================================
-
 st.subheader("🎤 Record your voice below")
-st.write("Click the microphone icon, speak in Mongolian, then click stop to transcribe:")
+st.write("Click the record button, speak in Mongolian, then click stop to transcribe:")
 
-wav_audio_data = audio_recorder("🎙️ Click to record")
+audio_file = st.audio_input("🎙️ Start recording")
 
-if wav_audio_data:
-    st.success(f"🎧 Recorded audio received — {len(wav_audio_data)} bytes")
+if audio_file is not None:
+    st.success(f"🎧 Recorded audio received — {audio_file.size} bytes")
+    st.audio(audio_file, format="audio/wav")
 
     # --- STEP 1: Decode audio ---
     try:
-        data, sr = sf.read(io.BytesIO(wav_audio_data))
+        data, sr = sf.read(io.BytesIO(audio_file.read()))
         st.caption(f"📊 Audio decoded: {data.shape}, {sr} Hz")
 
         # --- STEP 2: Convert to 16kHz mono (for Whisper) ---
@@ -115,7 +122,7 @@ if wav_audio_data:
         # --- STEP 5: Display result ---
         if text:
             st.success("✅ Recognition complete!")
-            st.markdown(f"### 🗣️ Recognized Text:")
+            st.markdown("### 🗣️ Recognized Text:")
             st.markdown(
                 f"<div style='padding:1rem;background:#f8f9fa;border-radius:12px;"
                 f"font-size:1.3rem;color:#111;'>{text}</div>",
@@ -137,6 +144,6 @@ else:
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v1.9)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.0)</p>",
     unsafe_allow_html=True
 )
