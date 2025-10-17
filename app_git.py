@@ -57,11 +57,11 @@ def load_model():
     translator = ctranslate2.Translator(ctranslate_dir, device="cpu", compute_type=compute_type)
     return processor, translator
 
-#def load_model():
-#    repo_id = "gana1215/MN_Whisper_Small_CT2"
-#    processor = WhisperProcessor.from_pretrained(repo_id)
-#    translator = ctranslate2.Translator(repo_id, device="cpu", compute_type=compute_type)
-#    return processor, translator
+def load_model():
+    repo_id = "gana1215/MN_Whisper_Small_CT2"
+    processor = WhisperProcessor.from_pretrained(repo_id)
+    translator = ctranslate2.Translator(repo_id, device="cpu", compute_type=compute_type)
+    return processor, translator
 
 with st.spinner("🔁 Loading Fast-Whisper model..."):
     processor, translator = load_model()
