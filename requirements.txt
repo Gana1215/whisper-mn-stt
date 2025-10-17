@@ -1,5 +1,6 @@
 # ============================================
-# 🎙️ Mongolian Fast-Whisper STT (Cloud Stable)
+# 🎙️ Mongolian Fast-Whisper STT (Cloud Stable Fix)
+# Works with Streamlit Cloud Python 3.13
 # ============================================
 
 # --- UI ---
@@ -15,10 +16,11 @@ faster-whisper==1.0.3
 
 # --- Audio + Math ---
 soundfile==0.13.1
-numpy==2.1.3
-av==12.0.0        # ✅ prebuilt wheel available (no pkg-config)
+# don't pin an exact numpy version – let Streamlit pick the wheel it can fetch
+numpy>=1.26,<3.0
+# remove PyAV entirely to avoid pkg-config build
+# av==12.0.0
 pillow==10.2.0
-pkgconfig          # optional helper
 
 # --- Torch CPU build ---
 torch==2.9.0+cpu
