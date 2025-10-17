@@ -1,18 +1,25 @@
-# Streamlit core
-streamlit==1.38.0
+# ======================================
+# 🎙️ Mongolian Fast-Whisper STT
+# Streamlit Cloud lightweight environment
+# ======================================
 
-# Audio recorder component
+# Core UI
+streamlit==1.38.0
 st-audiorec==0.1.3
 
-# Speech-to-text core
+# Fast Whisper (STT Engine)
 faster-whisper==1.0.3
 ctranslate2==4.4.0
 
-# Audio utilities
+# Core audio + numerical processing
 soundfile
-torch==2.2.2
-torchaudio==2.2.2
-
-# General helpers
-platformdirs
 numpy
+
+# CPU-safe PyTorch versions (no CUDA needed)
+torch==2.2.2+cpu
+torchaudio==2.2.2+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# System helpers
+platformdirs
+huggingface-hub>=0.23.0
