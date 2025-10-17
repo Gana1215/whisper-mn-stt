@@ -1,10 +1,10 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v2.9 — Trace Edition)
-# ✅ Full trace logging • Timeout-safe • Recorder diagnostics
+# 🎙️ Mongolian Fast-Whisper STT (v2.9.2 — Trace Edition, Compatibility-Safe)
+# ✅ Full trace logging • Timeout-safe • Auto warm-up • API compatible across all faster-whisper versions
 # ===============================================
 
 import streamlit as st
-import torch, logging, sys, io, time, tempfile, platform, concurrent.futures
+import torch, logging, sys, io, time, tempfile, platform, concurrent.futures, inspect
 import numpy as np, soundfile as sf, scipy.signal, av
 from faster_whisper import WhisperModel
 
@@ -13,7 +13,11 @@ import os
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
-#torch.set_num_interop_threads(1)
+if hasattr(torch, "set_num_interop_threads"):
+    try:
+        torch.set_num_interop_threads(1)
+    except Exception:
+        pass
 
 # ---------- TRACE LOGGER ----------
 logger = logging.getLogger("trace")
@@ -46,8 +50,8 @@ button[data-testid="stAudioInput__stop"]{background:linear-gradient(90deg,#d32f2
 """, unsafe_allow_html=True)
 
 st.markdown("<h1>🎙️ Mongolian Fast-Whisper STT</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>(Anti-Hallucination Edition — Cloud-Trace)</p>", unsafe_allow_html=True)
-st.caption("⚡ Fine-tuned Mongolian Whisper model with stable cloud inference and live tracing")
+st.markdown("<p class='subtitle'>(Anti-Hallucination Edition — Trace Compatible)</p>", unsafe_allow_html=True)
+st.caption("⚡ Fine-tuned Mongolian Whisper model with full trace diagnostics")
 
 # ---------- Model loading ----------
 system, processor = platform.system().lower(), platform.processor().lower()
@@ -61,6 +65,16 @@ def load_model():
 with st.spinner("🔁 Loading Whisper model..."):
     model = load_model()
 st.success("✅ Model loaded successfully!")
+
+# ---------- Compatibility-safe transcribe ----------
+def transcribe_compat(model, path, **kwargs):
+    """Call model.transcribe() safely for any faster-whisper version."""
+    sig = inspect.signature(model.transcribe)
+    if "show_progress" in sig.parameters:
+        kwargs["show_progress"] = False
+    elif "log_progress" in sig.parameters:
+        kwargs["log_progress"] = False
+    return model.transcribe(path, **kwargs)
 
 # ---------- Helper functions ----------
 def decode_webm_to_float32_mono_16k(webm_bytes: bytes):
@@ -100,7 +114,8 @@ def safe_transcribe(wav_path: str):
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
             fut = ex.submit(
-                model.transcribe,
+                transcribe_compat,
+                model,
                 wav_path,
                 language="mn",
                 beam_size=1,
@@ -109,7 +124,6 @@ def safe_transcribe(wav_path: str):
                 condition_on_previous_text=False,
                 word_timestamps=False,
                 temperature=0.0,
-                show_progress=False,
             )
             return fut.result(timeout=40)
     except concurrent.futures.TimeoutError:
@@ -131,7 +145,7 @@ if "warmup_done" not in st.session_state:
         sr = 16000
         warm = np.zeros(int(0.4 * sr), dtype=np.float32)
         path = write_temp_wav(warm, sr)
-        model.transcribe(path, language="mn", beam_size=1, show_progress=False)
+        transcribe_compat(model, path, language="mn", beam_size=1)
         trace("Warm-up done.")
     except Exception as e:
         trace(f"Warm-up failed: {e}")
@@ -215,6 +229,6 @@ if st.button("🔁 Retry last audio"):
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Trace Edition v2.9)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Trace Edition v2.9.2)</p>",
     unsafe_allow_html=True
 )
