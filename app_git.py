@@ -14,10 +14,10 @@ import tempfile, time, platform
 # 🎙️ Mongolian Fast-Whisper STT (Anti-Hallucination Edition)
 # Version 1.8 — Cloud-Stable (Hugging Face Integrated)
 # ===============================================
-import streamlit as st
+#import streamlit as st
 from faster_whisper import WhisperModel
-from st_audiorec import st_audiorec
-import tempfile, time, platform
+#from st_audiorec import st_audiorec
+#import tempfile, time, platform
 
 # --- Page Setup ---
 st.set_page_config(page_title="🎙️ Mongolian Fast-Whisper STT", page_icon="🎧", layout="centered")
