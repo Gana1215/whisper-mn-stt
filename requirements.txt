@@ -11,6 +11,8 @@ ctranslate2==4.6.0
 transformers==4.45.2
 sentencepiece>=0.1.99     # ✅ use prebuilt wheel (no cmake/pkg-config)
 huggingface-hub>=0.23.0
+faster-whisper==1.0.3
+
 
 # Audio + math
 soundfile
