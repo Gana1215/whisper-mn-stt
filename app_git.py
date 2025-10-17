@@ -1,6 +1,6 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v2.5 — Cloud-Stable + Auto Warm-Up)
-# ✅ PyAV WebM/Opus, safe I/O, guarded inference, first-click warm-up fix
+# 🎙️ Mongolian Fast-Whisper STT (v2.6 — Cloud-Stable + Auto Warm-Up)
+# ✅ PyAV WebM/Opus, safe I/O, guarded inference, fixed suppress_tokens
 # ===============================================
 
 import streamlit as st
@@ -87,7 +87,7 @@ def safe_transcribe(wav_path: str):
         language="mn",
         beam_size=1,
         vad_filter=True,
-        suppress_tokens="-1",
+        suppress_tokens=[-1],  # ✅ fixed: list not string
         condition_on_previous_text=False,
         word_timestamps=False
     )
@@ -206,6 +206,6 @@ with col2:
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.5)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.6)</p>",
     unsafe_allow_html=True
 )
