@@ -1,11 +1,8 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v2.2 — Cloud-Stable Mobile Edition)
-# ✅ WebM/Opus Auto-Conversion + Enhanced Recording UI
+# 🎙️ Mongolian Fast-Whisper STT (v2.3 — Cloud-Stable Mobile Fast)
+# ✅ WebM/Opus via PyAV (no ffmpeg), single-read I/O, minimal resampling
 # ===============================================
-import sys, types
-if "audioop" not in sys.modules:
-    sys.modules["audioop"] = types.ModuleType("audioop")
-# ---------------------------------------------------
+
 import streamlit as st
 from faster_whisper import WhisperModel
 import soundfile as sf
@@ -15,7 +12,9 @@ import tempfile
 import platform
 import time
 import io
-from pydub import AudioSegment  # 🔄 for WebM→WAV conversion
+
+# ✅ New: WebM/Opus decoder without ffmpeg binary
+import av  # PyAV
 
 # ===============================================
 # --- PAGE SETUP & STYLING ---
@@ -57,7 +56,7 @@ div.stButton>button:first-child{
     justify-content: center;
 }
 
-/* 🟢 Style record button */
+/* 🟢 Record button */
 button[data-testid="stAudioInput__record"] {
     transform: scale(1.5);
     background: linear-gradient(90deg,#0f4c81,#1f8ac0);
@@ -70,7 +69,7 @@ button[data-testid="stAudioInput__record"] {
     box-shadow: 0 4px 10px rgba(0,0,0,0.25);
 }
 
-/* 🔴 Style stop button */
+/* 🔴 Stop button */
 button[data-testid="stAudioInput__stop"] {
     transform: scale(1.5);
     background: linear-gradient(90deg,#d32f2f,#f44336);
@@ -96,11 +95,9 @@ st.caption("⚡ Fine-tuned Mongolian Whisper model with stable cloud inference")
 system = platform.system().lower()
 processor = platform.processor().lower()
 if "darwin" in system and "apple" in processor:
-    compute_type = "float32"
-elif "darwin" in system:
-    compute_type = "int8"
+    compute_type = "float32"   # Apple Silicon (local dev)
 else:
-    compute_type = "int8"  # Streamlit Cloud CPU
+    compute_type = "int8"      # Streamlit Cloud CPU
 
 @st.cache_resource(show_spinner=False)
 def load_model():
@@ -113,6 +110,39 @@ with st.spinner("🔁 Loading Whisper model..."):
 st.success("✅ Model loaded successfully! Ready to transcribe your voice.")
 
 # ===============================================
+# --- Helpers ---
+# ===============================================
+def decode_webm_to_float32_mono_16k(webm_bytes: bytes):
+    """Decode WebM/Opus to float32 mono @ 16k using PyAV (no external ffmpeg)."""
+    container = av.open(io.BytesIO(webm_bytes))
+    astream = next(s for s in container.streams if s.type == "audio")
+    resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=16000)
+
+    chunks = []
+    for packet in container.demux(astream):
+        for frame in packet.decode():
+            f = resampler.resample(frame)
+            # int16 PCM -> float32 [-1,1]
+            arr = f.to_ndarray()
+            if arr.ndim > 1:
+                arr = np.mean(arr, axis=0)
+            chunks.append(arr.astype(np.float32) / 32768.0)
+    container.close()
+    if not chunks:
+        return np.zeros((0,), dtype=np.float32), 16000
+    audio = np.concatenate(chunks)
+    return audio, 16000
+
+def ensure_mono_16k(data: np.ndarray, sr: int):
+    """Convert any PCM array to mono @ 16k with minimal work."""
+    if data.ndim > 1:
+        data = np.mean(data, axis=1)
+    if sr != 16000:
+        data = scipy.signal.resample_poly(data, 16000, sr)
+        sr = 16000
+    return data.astype(np.float32), sr
+
+# ===============================================
 # --- AUDIO RECORDING SECTION (st.audio_input) ---
 # ===============================================
 st.subheader("🎤 Record your voice below")
@@ -122,45 +152,34 @@ audio_file = st.audio_input("🎙️ Start recording")
 
 if audio_file is not None:
     st.success(f"🎧 Recorded audio received — {audio_file.size} bytes")
-    st.write("📁 Audio type:", audio_file.type)
+    st.caption(f"📁 MIME type: {audio_file.type}")
 
     try:
-        audio_bytes = audio_file.read()
+        audio_bytes = audio_file.read()  # read ONCE
 
-        # --- Handle WebM (mobile Chrome) ---
-        if "webm" in audio_file.type:
-            st.info("🔄 Converting mobile WebM/Opus audio → WAV format...")
-            audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="webm")
-            buf = io.BytesIO()
-            audio.export(buf, format="wav")
-            data, sr = sf.read(io.BytesIO(buf.getvalue()))
+        # Mobile Chrome: webm/opus
+        if audio_file.type and "webm" in audio_file.type:
+            st.info("🔄 Converting WebM/Opus → 16 kHz mono (PyAV)…")
+            data, sr = decode_webm_to_float32_mono_16k(audio_bytes)
         else:
-            # --- Handle WAV (desktop browsers) ---
-            data, sr = sf.read(io.BytesIO(audio_bytes))
+            # Desktop: usually WAV/PCM already
+            data, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32")
+            data, sr = ensure_mono_16k(data, sr)
 
-        st.caption(f"📊 Audio decoded successfully: {data.shape}, {sr} Hz")
+        st.caption(f"📊 Decoded: shape={data.shape}, sr={sr} Hz")
 
-        # --- STEP 2: Convert to 16kHz mono (for Whisper) ---
-        if sr != 16000:
-            data = scipy.signal.resample_poly(data, 16000, sr)
-            sr = 16000
-        if data.ndim > 1:
-            data = np.mean(data, axis=1)
-
-        # --- STEP 3: Save temporary file for Whisper ---
+        # --- Save temp WAV for Whisper ---
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             sf.write(tmp, data, sr)
             tmp_path = tmp.name
 
-        # --- STEP 4: Transcribe ---
-        st.info("⏳ Recognizing your Mongolian speech... please wait.")
-        start = time.time()
+        # --- Transcribe ---
+        st.info("⏳ Recognizing your Mongolian speech…")
+        t0 = time.time()
         segments, info = model.transcribe(tmp_path, language="mn", beam_size=1)
-        end = time.time()
-
         text = " ".join([s.text.strip() for s in segments if s.text.strip()])
+        dt = time.time() - t0
 
-        # --- STEP 5: Display result ---
         if text:
             st.success("✅ Recognition complete!")
             st.markdown("### 🗣️ Recognized Text:")
@@ -169,7 +188,7 @@ if audio_file is not None:
                 f"font-size:1.3rem;color:#111;'>{text}</div>",
                 unsafe_allow_html=True
             )
-            st.caption(f"⚡ Processed in {end - start:.2f}s — Model: MN_Whisper_Small_CT2 ({compute_type})")
+            st.caption(f"⚡ {dt:.2f}s — Model: MN_Whisper_Small_CT2 ({compute_type})")
         else:
             st.warning("⚠️ No speech detected. Please try again closer to the mic.")
 
@@ -177,7 +196,7 @@ if audio_file is not None:
         st.error(f"❌ Audio decoding error: {e}")
 
 else:
-    st.info("⏺️ Waiting for you to record...")
+    st.info("⏺️ Waiting for you to record…")
 
 # ===============================================
 # --- FOOTER ---
@@ -185,6 +204,6 @@ else:
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.2)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.3)</p>",
     unsafe_allow_html=True
 )
