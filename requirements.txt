@@ -3,24 +3,26 @@
 # Streamlit Cloud lightweight environment
 # ======================================
 
-# ----- Core UI -----
 streamlit==1.38.0
-streamlit-audiorec
+streamlit-audiorec 
 
-# ----- Whisper / STT Engine -----
-faster-whisper==1.0.3
+# Fast-Whisper engine
+faster-whisper==1.0.3 --only-binary=:all:
 ctranslate2>=4.6.0
 
-# ----- Core audio + numerical processing -----
+# Core audio + numerical
 soundfile==0.13.1
 numpy==2.3.4
 pillow==10.4.0
 
-# ----- CPU-safe PyTorch stack (no CUDA) -----
+# CPU-safe PyTorch stack
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.9.0+cpu
 torchaudio==2.9.0+cpu
 
-# ----- System helpers -----
+# System helpers
 platformdirs==4.5.0
 huggingface-hub==0.35.3
+
+# prevent PyAV build
+av==12.3.0 ; sys_platform == "never"
