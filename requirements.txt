@@ -7,7 +7,8 @@ streamlit==1.40.1
 streamlit-audiorec==0.1.3
 
 # Core Whisper runtime
-faster-whisper==1.0.3
+# ⚠️ Using prebuilt faster-whisper wheel to skip PyAV build
+faster-whisper==1.0.1
 ctranslate2==4.6.0
 transformers==4.45.2
 sentencepiece>=0.1.99
@@ -28,5 +29,4 @@ torchaudio==2.9.0+cpu
 tqdm==4.66.5
 platformdirs==4.5.0
 
-# ⚠️ Removed PyAV (not needed and fails to build)
-# av==12.3.0
+# 🚫 Skip PyAV (handled by faster-whisper prebuilt wheel)
