@@ -45,18 +45,8 @@ else: compute_type = "int8"  # Cloud/Colab CPU
 
 # --- Cached model loader ---
 #@st.cache_resource(show_spinner=False)
+
 @st.cache_resource(show_spinner=False)
-def load_model():
-    # Your fine-tuned weights (CTranslate2 export)
-    ctranslate_dir = "gana1215/MN_Whisper_Small_CT2"
-
-    # Borrow processor from base Whisper model
-    processor = WhisperProcessor.from_pretrained("openai/whisper-small")
-
-    # Load CTranslate2 runtime (Mongolian fine-tuned weights)
-    translator = ctranslate2.Translator(ctranslate_dir, device="cpu", compute_type=compute_type)
-    return processor, translator
-
 def load_model():
     repo_id = "gana1215/MN_Whisper_Small_CT2"
     processor = WhisperProcessor.from_pretrained(repo_id)
