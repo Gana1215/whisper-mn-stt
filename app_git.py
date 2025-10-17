@@ -2,7 +2,10 @@
 # 🎙️ Mongolian Fast-Whisper STT (v2.2 — Cloud-Stable Mobile Edition)
 # ✅ WebM/Opus Auto-Conversion + Enhanced Recording UI
 # ===============================================
-
+import sys, types
+if "audioop" not in sys.modules:
+    sys.modules["audioop"] = types.ModuleType("audioop")
+# ---------------------------------------------------
 import streamlit as st
 from faster_whisper import WhisperModel
 import soundfile as sf
