@@ -1,6 +1,6 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v2.6 — Cloud-Stable + Auto Warm-Up)
-# ✅ PyAV WebM/Opus, safe I/O, guarded inference, fixed suppress_tokens
+# 🎙️ Mongolian Fast-Whisper STT (v2.7 — Cloud-Stable + Auto Warm-Up)
+# ✅ Voice-only version (no file upload)
 # ===============================================
 
 import streamlit as st
@@ -185,27 +185,18 @@ else:
     st.info("⏺️ Waiting for you to record…")
     st.caption("💡 Tip: On first click, allow mic access. If nothing transcribes, record once more.")
 
-# ---------- Retry + File Upload ----------
-col1, col2 = st.columns([1,3])
-with col1:
-    if st.button("🔁 Retry last audio"):
-        if st.session_state.get("last_audio_bytes"):
-            audio_bytes, mime = st.session_state["last_audio_bytes"]
-            handle_audio_bytes(audio_bytes, mime)
-        else:
-            st.info("No previous audio to retry yet.")
-
-with col2:
-    upload = st.file_uploader("📂 Or upload .wav / .mp3 / .webm file", type=["wav","mp3","webm"], label_visibility="collapsed")
-    if upload is not None:
-        st.info(f"📥 Uploaded: {upload.name}")
-        audio_bytes = upload.read()
-        handle_audio_bytes(audio_bytes, upload.type or upload.name.split(".")[-1])
+# ---------- Retry Button Only ----------
+if st.button("🔁 Retry last audio"):
+    if st.session_state.get("last_audio_bytes"):
+        audio_bytes, mime = st.session_state["last_audio_bytes"]
+        handle_audio_bytes(audio_bytes, mime)
+    else:
+        st.info("No previous audio to retry yet.")
 
 # ---------- Footer ----------
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.6)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Anti-Hallucination Edition v2.7)</p>",
     unsafe_allow_html=True
 )
