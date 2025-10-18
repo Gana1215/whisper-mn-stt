@@ -1,9 +1,10 @@
 # ============================================
-# 🎙️ Mongolian Fast-Whisper STT (v3.0.0 — Custom Recorder Core)
+# 🎙️ Mongolian Fast-Whisper STT (v3.2 — Universal Recorder)
 # ============================================
 
-# --- UI ---
+# --- Core Streamlit UI ---
 streamlit==1.40.1
+streamlit-javascript==0.1.5   # ✅ Custom JS event bridge
 
 # --- Core Whisper Runtime ---
 faster-whisper==1.2.0
@@ -17,11 +18,9 @@ soundfile==0.13.1
 numpy>=1.26.4,<3.0
 scipy==1.14.1
 pillow>=11.0.0
+av==16.0.1  # ✅ WebM/Opus decoding
 
-# --- (Optional) If you ever need container formats, keep PyAV. Not required here.
-# av==16.0.1
-
-# --- CPU Torch Stack (if your env needs it explicitly) ---
+# --- CPU Torch ---
 torch==2.9.0
 torchaudio==2.9.0
 
