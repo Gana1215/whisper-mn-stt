@@ -1,8 +1,8 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v4.3.2 — Safe Recorder Edition)
-# ✅ Custom recorder (HTML5 + JS)
-# ✅ No widget dependencies (st-audiorec / st.audio_input)
-# ✅ HuggingFace local model, mobile-safe
+# 🎙️ Mongolian Fast-Whisper STT (v4.3.3 — Safe Recorder + Cloud Download)
+# ✅ Custom recorder (HTML5 + JS, works on mobile)
+# ✅ Allows Hugging Face model download on Streamlit Cloud
+# ✅ Fast inference, anti-hallucination, fully traced
 # ===============================================
 
 import os, io, base64, tempfile, time, platform, concurrent.futures, json
@@ -10,7 +10,7 @@ import numpy as np
 import soundfile as sf
 import av
 import streamlit as st
-import streamlit.components.v1 as components   # ✅ important for HTML recorder
+import streamlit.components.v1 as components   # ✅ must exist before recorder
 from faster_whisper import WhisperModel
 import torch, inspect, logging, sys
 
@@ -36,7 +36,7 @@ def trace(msg: str):
     st.caption(f"🧭 {msg}")
     logger.info(msg)
 
-# ---------- PAGE STYLING ----------
+# ---------- PAGE SETUP ----------
 st.set_page_config(page_title="🎙️ Mongolian Fast-Whisper STT", page_icon="🎧", layout="centered")
 st.markdown("""
 <style>
@@ -59,8 +59,8 @@ h1{
 """, unsafe_allow_html=True)
 
 st.markdown("<h1>🎙️ Mongolian Fast-Whisper STT</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>(v4.3.2 — Safe Recorder Edition)</p>", unsafe_allow_html=True)
-st.caption("⚡ Fine-tuned Mongolian Whisper model with fully compatible custom recorder")
+st.markdown("<p class='subtitle'>(v4.3.3 — Safe Recorder + Cloud Download Edition)</p>", unsafe_allow_html=True)
+st.caption("⚡ Fine-tuned Mongolian Whisper model — mobile compatible and cloud optimized.")
 
 # ---------- MODEL LOAD ----------
 system, processor = platform.system().lower(), platform.processor().lower()
@@ -68,19 +68,19 @@ compute_type = "float32" if ("darwin" in system and "apple" in processor) else "
 
 @st.cache_resource(show_spinner=False)
 def load_model():
-    trace("Loading WhisperModel (CT2 backend)...")
+    trace("Loading WhisperModel (CT2 backend, remote allowed)...")
     return WhisperModel(
         "gana1215/MN_Whisper_Small_CT2",
         device="cpu",
         compute_type=compute_type,
-        local_files_only=True  # ✅ loads from cache or repo
+        local_files_only=False  # ✅ allow download on first run
     )
 
-with st.spinner("🔁 Loading Whisper model..."):
+with st.spinner("🔁 Loading Whisper model (please wait 30–60s first time)..."):
     model = load_model()
 st.success("✅ Model loaded successfully!")
 
-# ---------- COMPATIBLE TRANSCRIBE ----------
+# ---------- TRANSCRIBE WRAPPER ----------
 def transcribe_compat(model, path, **kwargs):
     sig = inspect.signature(model.transcribe)
     if "show_progress" in sig.parameters:
@@ -89,7 +89,6 @@ def transcribe_compat(model, path, **kwargs):
         kwargs["log_progress"] = False
     return model.transcribe(path, **kwargs)
 
-# ---------- SAFE TRANSCRIBE ----------
 def safe_transcribe(wav_path: str):
     trace("Stage 3: Starting model.transcribe()…")
     try:
@@ -106,9 +105,9 @@ def safe_transcribe(wav_path: str):
                 word_timestamps=False,
                 temperature=0.0,
             )
-            return fut.result(timeout=40)
+            return fut.result(timeout=45)
     except concurrent.futures.TimeoutError:
-        trace("Stage 3: TIMEOUT — transcription exceeded 40 s.")
+        trace("Stage 3: TIMEOUT — transcription exceeded 45 s.")
         st.warning("⏳ Timeout — please retry with a shorter clip.")
         return [], None
     except Exception as e:
@@ -149,7 +148,7 @@ def write_temp_wav(data: np.ndarray, sr: int):
 if "last_text" not in st.session_state:
     st.session_state["last_text"] = ""
 
-# ---------- CUSTOM RECORDER FRONTEND ----------
+# ---------- CUSTOM RECORDER ----------
 rec = components.html(
     """
     <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
@@ -165,7 +164,6 @@ rec = components.html(
     const btn=document.getElementById("recbtn");
     const status=document.getElementById("status");
 
-    // Initial handshake to prevent 'SessionInfo not initialized'
     window.parent.postMessage({type:'streamlit:setComponentValue',value:""}, '*');
 
     async function startRec(){
@@ -209,10 +207,10 @@ rec = components.html(
     """,
     height=230,
     scrolling=False,
-    key="recorder_v432"
+    key="recorder_v433"
 )
 
-# ---------- BACKEND PROCESS ----------
+# ---------- BACKEND PIPELINE ----------
 if rec and isinstance(rec, str) and len(rec) > 10:
     try:
         payload = json.loads(rec)
@@ -251,6 +249,6 @@ if rec and isinstance(rec, str) and len(rec) > 10:
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (v4.3.2 Safe Recorder Edition)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (v4.3.3 Safe Recorder Edition)</p>",
     unsafe_allow_html=True,
 )
