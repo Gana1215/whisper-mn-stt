@@ -1,8 +1,7 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v4.3.5 — Safe Recorder Edition)
-# ✅ Custom HTML5 recorder (mobile + desktop)
-# ✅ Fixed Streamlit Cloud sandbox issue (safe components.html)
-# ✅ Faster-Whisper CT2 backend (fine-tuned MN model)
+# 🎙️ Mongolian Fast-Whisper STT (v4.3.6 — Safe Recorder + Auto-Initialize)
+# ✅ Fully compatible with Streamlit Cloud, iPhone Safari, Chrome, Android, macOS, Windows
+# ✅ Fine-tuned MN_Whisper_Small_CT2 model from Hugging Face
 # ===============================================
 
 import os, io, tempfile, time, platform, concurrent.futures, json, logging, sys, inspect
@@ -13,9 +12,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 from faster_whisper import WhisperModel
 import torch
-
-# ---------- CONFIG ----------
-SHOW_TRACE = False  # toggle to True for debugging trace logs
 
 # ---------- THREADING GUARDS ----------
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -35,12 +31,12 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 def trace(msg: str):
-    if SHOW_TRACE:
-        st.caption(f"🧭 {msg}")
+    st.caption(f"🧭 {msg}")
     logger.info(msg)
 
-# ---------- PAGE ----------
+# ---------- PAGE CONFIG ----------
 st.set_page_config(page_title="🎙️ Mongolian Fast-Whisper STT", page_icon="🎧", layout="centered")
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+MN&display=swap');
@@ -60,10 +56,10 @@ h1{
 """, unsafe_allow_html=True)
 
 st.markdown("<h1>🎙️ Mongolian Fast-Whisper STT</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>(v4.3.5 — Safe Recorder Edition)</p>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>(v4.3.6 — Safe Recorder + Auto-Initialize)</p>", unsafe_allow_html=True)
 st.caption("⚡ Fine-tuned Mongolian Whisper model — mobile compatible & cloud optimized.")
 
-# ---------- MODEL ----------
+# ---------- MODEL LOAD ----------
 system, processor = platform.system().lower(), platform.processor().lower()
 compute_type = "float32" if ("darwin" in system and "apple" in processor) else "int8"
 
@@ -74,7 +70,7 @@ def load_model():
         "gana1215/MN_Whisper_Small_CT2",
         device="cpu",
         compute_type=compute_type,
-        local_files_only=False  # ✅ allow download from Hugging Face
+        local_files_only=False
     )
 
 with st.spinner("🔁 Loading Whisper model (first load may take ~1 min)…"):
@@ -146,7 +142,13 @@ if "last_audio_bytes" not in st.session_state:
 if "last_mime" not in st.session_state:
     st.session_state["last_mime"] = "audio/webm"
 
-# ---------- CUSTOM RECORDER ----------
+# ---------- CUSTOM RECORDER (v4.3.6) ----------
+st.markdown("### 🎙️ Voice Recorder")
+st.caption("If you don’t see the mic button, click below to initialize the recorder.")
+
+if st.button("🔄 Initialize Recorder"):
+    st.rerun()
+
 html_code = """
 <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
   <button id="recbtn" style="
@@ -159,7 +161,6 @@ html_code = """
 let rec,chunks=[];
 const btn=document.getElementById("recbtn");
 const status=document.getElementById("status");
-
 window.parent.postMessage({type:'streamlit:setComponentValue',value:""},'*');
 
 async function startRec(){
@@ -176,13 +177,13 @@ async function startRec(){
      const json=JSON.stringify({audio:bytes,mime:blob.type||'audio/webm'});
      window.parent.postMessage({type:'streamlit:setComponentValue',value:json},'*');
      setTimeout(()=>window.parent.postMessage({type:'streamlit:setComponentValue',value:json},'*'),50);
-     status.textContent='✅ Audio sent';
+     status.textContent='✅ Audio sent to model.';
    };
    rec.start();
    btn.textContent='⏹ Stop';
    btn.style.background='#d32f2f';
    status.textContent='Recording...';
- }catch(err){status.textContent='❌ Mic permission denied';}
+ }catch(err){status.textContent='❌ Mic permission denied or unavailable';}
 }
 
 function stopRec(){
@@ -197,15 +198,13 @@ btn.addEventListener('click',()=>{if(!rec||rec.state==='inactive')startRec();els
 </script>
 """
 
-# --- Safe sandbox init wrapper ---
 try:
-    rec = components.html(html_code, height=230, scrolling=False, key="recorder_v435")
+    rec = components.html(html_code, height=250, scrolling=False, key="recorder_v436")
 except TypeError:
-    st.info("⚙️ Initializing recorder sandbox… please wait a few seconds.")
-    time.sleep(1.5)
+    st.warning("⚙️ Recorder sandbox initializing — click '🔄 Initialize Recorder' if nothing appears.")
     rec = ""
 except Exception as e:
-    st.warning(f"⚠️ Recorder sandbox delayed: {e}")
+    st.warning(f"⚠️ Recorder sandbox issue: {e}")
     rec = ""
 
 # ---------- PIPELINE ----------
@@ -239,7 +238,7 @@ if isinstance(rec, str) and len(rec) > 10:
     except Exception as e:
         st.error(f"❌ Recorder error: {e}")
 
-# ---------- RETRY ----------
+# ---------- RETRY + DOWNLOAD ----------
 col1, col2 = st.columns(2)
 with col1:
     if st.button("🔁 Retry last audio", use_container_width=True):
@@ -285,9 +284,10 @@ if st.session_state.get("last_text"):
         f"<p style='font-size:1.05rem;color:#444;'>🗣️ <b>Last recognized text:</b> {st.session_state['last_text']}</p>",
         unsafe_allow_html=True
     )
+
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
-    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (v4.3.5)</p>",
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (v4.3.6)</p>",
     unsafe_allow_html=True
 )
