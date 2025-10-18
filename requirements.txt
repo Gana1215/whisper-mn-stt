@@ -1,10 +1,9 @@
 # ============================================
-# 🎙️ Mongolian Fast-Whisper STT (v2.9.8 — iPhone Chrome Fix Edition)
+# 🎙️ Mongolian Fast-Whisper STT (v3.0.0 — Custom Recorder Core)
 # ============================================
 
 # --- UI ---
 streamlit==1.40.1
-# st.audio_input is built-in; no st-audiorec dependency required
 
 # --- Core Whisper Runtime ---
 faster-whisper==1.2.0
@@ -13,15 +12,16 @@ transformers==4.45.2
 sentencepiece>=0.1.99
 huggingface-hub>=0.23.0
 
-# --- Audio + Math + Decode ---
+# --- Audio + Math ---
 soundfile==0.13.1
 numpy>=1.26.4,<3.0
 scipy==1.14.1
-pillow>=11.0.0       # ✅ relaxed pin for uv resolver
-av==16.0.1           # ✅ PyAV (universal decoder: WebM/Opus/AAC/M4A/MP4/CAF)
-# ↑ critical for iPhone/Safari Chrome AAC/MP4 recording
+pillow>=11.0.0
 
-# --- CPU Torch Stack ---
+# --- (Optional) If you ever need container formats, keep PyAV. Not required here.
+# av==16.0.1
+
+# --- CPU Torch Stack (if your env needs it explicitly) ---
 torch==2.9.0
 torchaudio==2.9.0
 
