@@ -1,6 +1,6 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v3.0 — Custom Recorder, Offline-Safe)
-# ✅ iPhone Chrome/Safari compatible • No HuggingFace fetch
+# 🎙️ Mongolian Fast-Whisper STT (v3.1 — Custom Recorder, Offline-Safe)
+# ✅ iPhone Chrome/Safari compatible • No HuggingFace fetch • Trace logging
 # ===============================================
 
 import streamlit as st
@@ -62,7 +62,7 @@ compute_type = "float32" if ("darwin" in system and "apple" in processor) else "
 @st.cache_resource(show_spinner=False)
 def load_model():
     trace("Loading WhisperModel (CT2 backend)…")
-    local_dir = "./models/MN_Whisper_Tiny_CT2"  # or MN_Whisper_Small_CT2
+    local_dir = "./models/MN_Whisper_Tiny_CT2"  # ✅ Use Small_CT2 if preferred
 
     if os.path.isdir(local_dir):
         trace(f"📦 Using local model directory: {local_dir}")
@@ -101,7 +101,8 @@ def decode_webm_to_float32_mono_16k(webm_bytes: bytes):
         for frame in packet.decode():
             f = resampler.resample(frame)
             arr = f.to_ndarray()
-            if arr.ndim > 1: arr = np.mean(arr, axis=0)
+            if arr.ndim > 1:
+                arr = np.mean(arr, axis=0)
             chunks.append(arr.astype(np.float32) / 32768.0)
     container.close()
     if not chunks:
@@ -112,7 +113,8 @@ def decode_webm_to_float32_mono_16k(webm_bytes: bytes):
 
 def ensure_mono_16k(data: np.ndarray, sr: int):
     trace(f"Stage 2: Resampling to 16 kHz (current sr={sr})…")
-    if data.ndim > 1: data = np.mean(data, axis=1)
+    if data.ndim > 1:
+        data = np.mean(data, axis=1)
     if sr != 16000:
         data = scipy.signal.resample_poly(data, 16000, sr)
         sr = 16000
@@ -166,8 +168,10 @@ if "warmup_done" not in st.session_state:
             transcribe_compat(model, path, language="mn", beam_size=1)
             trace("Warm-up done.")
         finally:
-            try: os.unlink(path)
-            except Exception: pass
+            try:
+                os.unlink(path)
+            except Exception:
+                pass
     except Exception as e:
         trace(f"Warm-up failed: {e}")
 
@@ -185,10 +189,9 @@ st.subheader("🎤 Record your voice below")
 st.write("Click the mic, speak Mongolian, then click stop to transcribe:")
 st.caption("🟢 Tip: If the first try fails to init mic, press Start again.")
 
-colA, colB = st.columns([3,1])
+colA, colB = st.columns([3, 1])
 with colA:
-    audio_file = st.audio_input("🎙️ Start recording",
-                                key=f"recorder_input_{st.session_state['recorder_refresh']}")
+    audio_file = st.audio_input("🎙️ Start recording", key=f"recorder_input_{st.session_state['recorder_refresh']}")
 with colB:
     if st.button("🧹 Reset recorder"):
         st.session_state["recorder_refresh"] += 1
@@ -227,8 +230,76 @@ def handle_audio(audio_bytes: bytes, mime: str):
     try:
         segments, info = safe_transcribe(tmp)
     finally:
-        try: os.unlink(tmp)
-        except Exception: pass
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
     dt = time.time() - t0
 
-    text = " ".join([s.text.strip() for s in segments if getattr(s, "text", "").strip()]) if segment
+    # ---------- FIXED RESULT BLOCK ----------
+    text = (
+        " ".join([s.text.strip() for s in segments if getattr(s, "text", "").strip()])
+        if segments
+        else ""
+    )
+
+    st.session_state["last_text"] = text
+
+    if text:
+        trace("Stage 4: Recognition successful.")
+        st.success("✅ Recognition complete!")
+        st.markdown(
+            f"<div style='padding:1rem;background:#f8f9fa;border-radius:12px;"
+            f"font-size:1.3rem;color:#111;'>{text}</div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(f"⚡ {dt:.2f}s — Model: MN_Whisper_Tiny_CT2 ({compute_type})")
+    else:
+        trace("Stage 4: No speech detected.")
+        st.warning("⚠️ No speech detected.")
+
+# ---------- EXECUTION FLOW ----------
+if audio_file is not None:
+    trace("Stage 0: Audio input triggered.")
+    st.session_state["last_audio_bytes"] = None
+    try:
+        audio_bytes = audio_file.read()
+        mime = audio_file.type or "audio/webm"
+        if audio_bytes and len(audio_bytes) > 800:
+            st.session_state["last_audio_bytes"] = (audio_bytes, mime)
+            handle_audio(audio_bytes, mime)
+        else:
+            trace("Stage 0: Empty/short buffer, skipping.")
+            st.warning("🎙️ Empty recording — try again or Reset.")
+    except Exception as e:
+        trace(f"Top-level ERROR: {e}")
+        st.error(f"❌ Unexpected error: {e}")
+else:
+    trace("Stage 0: Waiting for recording input.")
+    st.info("⏺️ Waiting for you to record…")
+
+# ---------- RETRY ----------
+if st.button("🔁 Retry last audio"):
+    trace("Retry button clicked.")
+    if st.session_state.get("last_audio_bytes"):
+        audio_bytes, mime = st.session_state["last_audio_bytes"]
+        handle_audio(audio_bytes, mime)
+    else:
+        st.info("No previous audio to retry yet.")
+
+# ---------- LAST TEXT SUMMARY ----------
+if st.session_state["last_text"]:
+    st.markdown("---")
+    st.markdown(
+        f"<p style='font-size:1.1rem;color:#444;'>🗣️ <b>Last recognized text:</b> "
+        f"{st.session_state['last_text']}</p>",
+        unsafe_allow_html=True,
+    )
+
+# ---------- FOOTER ----------
+st.markdown("---")
+st.markdown(
+    "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Custom Recorder v3.1)</p>",
+    unsafe_allow_html=True,
+)
