@@ -1,149 +1,133 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v3.6 — Cloud Recorder Fix)
-# ✅ Works on Streamlit Cloud + iPhone Safari/Chrome
-# ✅ Recorder initialized after DOM ready
+# 🎙️ Mongolian Fast-Whisper STT (v3.0 — Custom Recorder Edition)
+# ✅ Works on iPhone Safari/Chrome, Android, Mac, Windows
+# ✅ No st-audiorec or st.audio_input dependency
 # ===============================================
 
 import streamlit as st
-import torch, io, os, sys, time, tempfile, logging, concurrent.futures, base64, platform
-import numpy as np, soundfile as sf, scipy.signal, av
+import base64, io, os, soundfile as sf, numpy as np, time, tempfile, inspect, concurrent.futures
 from faster_whisper import WhisperModel
-from streamlit_javascript import st_javascript
 
-# ---------- Setup ----------
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-torch.set_num_threads(1)
-if hasattr(torch, "set_num_interop_threads"):
-    try: torch.set_num_interop_threads(1)
-    except Exception: pass
-
+# ---------------------- UI SETUP ----------------------
 st.set_page_config(page_title="🎙️ Mongolian Fast-Whisper STT", page_icon="🎧", layout="centered")
-
 st.markdown("""
 <style>
-html,body,[class*="css"]{
-  font-family:'Noto Sans MN',sans-serif;
-  background:radial-gradient(circle at top left,#f0f2f6,#dfe4ea);
-  color:#222;
-}
-h1{
-  background:-webkit-linear-gradient(45deg,#0f4c81,#1f8ac0);
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-  font-weight:800;text-align:center;
-}
-button.recorder {
-  background:#0f4c81;color:white;border:none;border-radius:50%;
-  width:100px;height:100px;font-size:1.1rem;
-  box-shadow:0 4px 10px rgba(0,0,0,0.25);
-  transition:all .25s ease-in-out;
-}
-button.recorder.recording {
-  background:#d32f2f;box-shadow:0 0 20px #ff4d4d;
-}
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+MN&display=swap');
+html,body,[class*="css"]{font-family:'Noto Sans MN',sans-serif;
+background:radial-gradient(circle at top left,#f0f2f6,#dfe4ea);color:#222;}
+h1{background:-webkit-linear-gradient(45deg,#0f4c81,#1f8ac0);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+font-weight:800;text-align:center;margin-bottom:0.3rem;}
+.subtitle{text-align:center;font-size:1.1rem;color:#555;margin-bottom:1rem;font-style:italic;}
+button{background:linear-gradient(90deg,#0f4c81,#1f8ac0);color:white;
+border:none;padding:0.8rem 1.5rem;border-radius:8px;font-size:1rem;cursor:pointer;}
+button:disabled{opacity:0.5;cursor:not-allowed;}
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("<h1>🎙️ Mongolian Fast-Whisper STT</h1>", unsafe_allow_html=True)
-st.caption("v3.6 — Cloud-safe universal recorder (iPhone + desktop)")
+st.markdown("<p class='subtitle'>(Custom Recorder Edition — Universal Browser Safe)</p>", unsafe_allow_html=True)
 
-# ---------- Logger ----------
-def trace(msg): st.caption(f"🧭 {msg}")
-
-# ---------- Model ----------
-system, proc = platform.system().lower(), platform.processor().lower()
-compute_type = "float32" if ("darwin" in system and "apple" in proc) else "int8"
-
-@st.cache_resource(show_spinner=False)
+# ---------------------- LOAD MODEL ----------------------
+@st.cache_resource(show_spinner=True)
 def load_model():
-    trace("Loading Whisper model (CT2 backend)…")
-    return WhisperModel("gana1215/MN_Whisper_Small_CT2", device="cpu", compute_type=compute_type)
+    return WhisperModel("gana1215/MN_Whisper_Small_CT2", device="cpu", compute_type="int8")
 
-with st.spinner("🔁 Loading Whisper model…"):
-    model = load_model()
+model = load_model()
 st.success("✅ Model loaded successfully!")
 
-# ---------- Audio utils ----------
-def decode_webm_to_float32_mono_16k(webm_bytes: bytes):
-    container = av.open(io.BytesIO(webm_bytes))
-    stream = next(s for s in container.streams if s.type == "audio")
-    resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=16000)
-    chunks=[]
-    for pkt in container.demux(stream):
-        for frame in pkt.decode():
-            f=resampler.resample(frame)
-            arr=f.to_ndarray()
-            if arr.ndim>1: arr=np.mean(arr,axis=0)
-            chunks.append(arr.astype(np.float32)/32768.0)
-    container.close()
-    return np.concatenate(chunks) if chunks else np.zeros(0,np.float32),16000
+# ---------------------- JS RECORDER ----------------------
+st.markdown("### 🎤 Record your voice below and click Stop to transcribe:")
 
-def write_temp_wav(data,sr):
-    fd,path=tempfile.mkstemp(suffix=".wav");os.close(fd);sf.write(path,data,sr);return path
-
-def safe_transcribe(path):
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        fut=ex.submit(model.transcribe,path,language="mn",beam_size=1,vad_filter=False)
-        return fut.result(timeout=40)
-
-# ---------- Recorder UI + JS ----------
-st.markdown("""
-<div style="text-align:center;">
-  <button id="recbtn" class="recorder">🎙 Start</button>
-  <p id="statusText" style="font-style:italic;color:#555;">Ready to record</p>
+st.components.v1.html("""
+<div style='text-align:center'>
+  <button id="recBtn">🎙️ Start Recording</button>
+  <button id="stopBtn" disabled>⏹ Stop</button>
+  <p id="status" style='color:#555;font-size:1.1rem'></p>
 </div>
 <script>
-document.addEventListener("DOMContentLoaded",()=>{
-  let chunks=[],mediaRecorder;
-  const btn=document.getElementById("recbtn");
-  const status=document.getElementById("statusText");
-  async function startRec(){
+let recBtn=document.getElementById('recBtn');
+let stopBtn=document.getElementById('stopBtn');
+let status=document.getElementById('status');
+let mediaRecorder,audioChunks=[];
+
+recBtn.onclick=async()=>{
+  try{
     const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    chunks=[];mediaRecorder=new MediaRecorder(stream);
-    mediaRecorder.ondataavailable=e=>chunks.push(e.data);
-    mediaRecorder.onstop=async()=>{
-      const blob=new Blob(chunks,{type:'audio/webm'});
-      const buf=await blob.arrayBuffer();
-      const b64=btoa(String.fromCharCode(...new Uint8Array(buf)));
-      status.innerText="Processing audio…";
-      window.streamlitRPC.send(b64);
-      btn.classList.remove("recording");
-      btn.innerText="🎙 Start";
-    };
+    audioChunks=[];
+    mediaRecorder=new MediaRecorder(stream);
     mediaRecorder.start();
-    btn.classList.add("recording");
-    btn.innerText="⏹ Stop";
-    status.innerText="Recording…";
-    btn.onclick=stopRec;
+    recBtn.disabled=true; stopBtn.disabled=false;
+    status.innerText='🎙️ Recording... speak now';
+    mediaRecorder.ondataavailable=e=>audioChunks.push(e.data);
+  }catch(err){
+    status.innerText='❌ Mic access denied.';
   }
-  function stopRec(){mediaRecorder.stop();status.innerText="Stopped";}
-  btn.onclick=startRec;
+};
+
+stopBtn.onclick=()=>{
+  mediaRecorder.stop();
+  recBtn.disabled=false; stopBtn.disabled=true;
+  status.innerText='⏳ Processing...';
+  mediaRecorder.onstop=()=>{
+    const blob=new Blob(audioChunks,{type:'audio/webm'});
+    blob.arrayBuffer().then(buf=>{
+      const base64=btoa(String.fromCharCode(...new Uint8Array(buf)));
+      window.parent.postMessage({type:'AUDIO_B64',data:base64},'*');
+    });
+  };
+};
+</script>
+""", height=250)
+
+# ---------------------- JS MESSAGE HANDLER ----------------------
+st.markdown("""
+<script>
+window.addEventListener('message',(e)=>{
+  if(e.data.type==='AUDIO_B64'){
+    window.parent.postMessage({type:'streamlit:setComponentValue',value:e.data.data},'*');
+  }
 });
 </script>
 """, unsafe_allow_html=True)
 
-audio_base64 = st_javascript("""new Promise(resolve=>{
-  window.streamlitRPC.onReceive=(data)=>resolve(data);
-});""")
+# Listen for the base64 data
+audio_b64 = st.experimental_get_query_params().get("audio_b64")
+if "_REC_" in st.session_state:
+    audio_b64 = st.session_state["_REC_"]
 
-# ---------- After recording ----------
-if audio_base64:
-    st.info("⏳ Transcribing your voice…")
+# ---------------------- DECODE + TRANSCRIBE ----------------------
+def transcribe_bytes(b64data: str):
+    audio_bytes = base64.b64decode(b64data)
+    data, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32")
+    if data.ndim > 1: data = np.mean(data, axis=1)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    sf.write(tmp.name, data, sr)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(model.transcribe, tmp.name, language="mn", beam_size=1)
+        segments, info = future.result(timeout=40)
+    os.unlink(tmp.name)
+    text = " ".join([s.text.strip() for s in segments if getattr(s, "text", "").strip()])
+    return text
+
+# ---------------------- PROCESS FLOW ----------------------
+if audio_b64:
     try:
-        audio_bytes=base64.b64decode(audio_base64)
-        data,sr=decode_webm_to_float32_mono_16k(audio_bytes)
-        tmp=write_temp_wav(data,sr)
-        segments,info=safe_transcribe(tmp)
-        os.unlink(tmp)
-        text=" ".join([s.text.strip() for s in segments if getattr(s,"text","").strip()]) if segments else ""
-        if text:
+        st.info("⏳ Recognizing Mongolian speech...")
+        text = transcribe_bytes(audio_b64[0])
+        if text.strip():
             st.success("✅ Recognition complete!")
-            st.markdown(f"<div style='padding:1rem;background:#f8f9fa;border-radius:12px;font-size:1.3rem;color:#111;'>{text}</div>",unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='padding:1rem;background:#f8f9fa;border-radius:12px;"
+                f"font-size:1.3rem;color:#111;'>{text}</div>", unsafe_allow_html=True)
         else:
             st.warning("⚠️ No speech detected.")
     except Exception as e:
-        st.error(f"❌ {e}")
+        st.error(f"❌ Error: {e}")
 
 st.markdown("---")
-st.markdown("<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>Fine-tuned Whisper Small CT2 — v3.6 Cloud Recorder</p>", unsafe_allow_html=True)
+st.markdown(
+    "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (Custom Recorder Edition)</p>",
+    unsafe_allow_html=True,
+)
