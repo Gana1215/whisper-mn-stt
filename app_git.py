@@ -1,5 +1,5 @@
 # ===============================================
-# 🎙️ Mongolian Fast-Whisper STT (v4.3 — Stable Custom Recorder)
+# 🎙️ Mongolian Fast-Whisper STT (v4.3.1 — Stable Custom Recorder)
 # ✅ Cross-browser (iPhone Safari/Chrome, Android, Desktop)
 # ✅ Dual-message bridge fix (Streamlit Cloud safe)
 # ✅ Uses gana1215/MN_Whisper_Small_CT2
@@ -29,7 +29,7 @@ font-weight:800;text-align:center;margin-bottom:0.3rem;}
 """, unsafe_allow_html=True)
 
 st.markdown("<h1>🎙️ Mongolian Fast-Whisper STT</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>(v4.3 — Stable Custom Recorder)</p>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>(v4.3.1 — Stable Custom Recorder)</p>", unsafe_allow_html=True)
 
 # ---------- MODEL LOAD ----------
 system, processor = platform.system().lower(), platform.processor().lower()
@@ -142,7 +142,7 @@ rec = components.html(
     """,
     height=230,
     scrolling=False,
-    key="recorder_v43"
+    key="recorder_v431"
 )
 
 # ---------- PROCESS ----------
@@ -175,7 +175,7 @@ if isinstance(rec, str) and rec:
         st.error(f"❌ Error: {e}")
 
 # ---------- RETRY + LAST RESULT ----------
-col1, col2 = st.columns([1,1])
+col1, col2 = st.columns([1, 1])
 with col1:
     if st.button("🔁 Retry last audio", use_container_width=True):
         if st.session_state.get("last_audio_bytes"):
@@ -189,3 +189,37 @@ with col1:
             os.unlink(wav)
             text = " ".join([s.text.strip() for s in segments if getattr(s, "text", "").strip()]) if segments else ""
             if text:
+                st.success("✅ Recognition complete!")
+                st.markdown(f"<div class='result'>{text}</div>", unsafe_allow_html=True)
+                st.caption(f"⚡ {(time.time()-t0):.2f}s — Retried")
+                st.session_state["last_text"] = text
+            else:
+                st.warning("⚠️ No speech detected.")
+        else:
+            st.info("No previous audio to retry yet.")
+
+with col2:
+    if st.session_state.get("last_audio_bytes"):
+        st.download_button(
+            "⬇️ Download last audio",
+            data=st.session_state["last_audio_bytes"],
+            file_name="recording.webm",
+            mime=st.session_state.get("last_mime", "audio/webm"),
+            use_container_width=True
+        )
+    else:
+        st.button("⬇️ Download last audio", disabled=True, use_container_width=True)
+
+if st.session_state.get("last_text"):
+    st.markdown("---")
+    st.markdown(
+        f"<p style='font-size:1.05rem;color:#444;'>🗣️ <b>Last recognized text:</b> {st.session_state['last_text']}</p>",
+        unsafe_allow_html=True
+    )
+
+st.markdown("---")
+st.markdown(
+    "<p style='text-align:center;color:#666;'>Developed by <b>Gankhuyag Mambaryenchin</b><br>"
+    "Fine-tuned Whisper Model — Mongolian Fast-Whisper (v4.3.1 Stable Custom Recorder)</p>",
+    unsafe_allow_html=True
+)
