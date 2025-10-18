@@ -1,29 +1,29 @@
 # ============================================
-# 🎙️ Mongolian Fast-Whisper STT (v3.2 — Universal Recorder)
+# 🎙️ Mongolian Fast-Whisper STT (v4.3.4)
+# ✅ Cloud-stable + iPhone Safari/Chrome compatible
 # ============================================
 
-# --- Core Streamlit UI ---
+# --- Streamlit Core ---
 streamlit==1.40.1
-streamlit-javascript==0.1.5   # ✅ Custom JS event bridge
 
-# --- Core Whisper Runtime ---
+# --- Whisper Runtime (CT2 + Faster-Whisper) ---
 faster-whisper==1.2.0
 ctranslate2==4.6.0
+huggingface-hub==0.25.2
+sentencepiece==0.2.1
 transformers==4.45.2
-sentencepiece>=0.1.99
-huggingface-hub>=0.23.0
 
-# --- Audio + Math ---
+# --- Audio Processing ---
 soundfile==0.13.1
 numpy>=1.26.4,<3.0
 scipy==1.14.1
+av==16.0.1        # ✅ PyAV for WebM/Opus decode (browser recordings)
 pillow>=11.0.0
-av==16.0.1  # ✅ WebM/Opus decoding
 
-# --- CPU Torch ---
+# --- Torch CPU backend ---
 torch==2.9.0
 torchaudio==2.9.0
 
-# --- Helpers ---
+# --- Utility ---
 tqdm==4.66.5
 platformdirs==4.5.0
